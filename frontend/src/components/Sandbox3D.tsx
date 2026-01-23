@@ -1,7 +1,8 @@
 // 3D 沙箱渲染容器 - 全屏显示
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useAppStore } from '../stores/appStore';
 import { InteractionGuide } from './InteractionGuide';
+import { NaturalLanguageConsole } from './NaturalLanguageConsole';
 
 interface Sandbox3DProps {
   htmlContent: string;
@@ -11,6 +12,7 @@ interface Sandbox3DProps {
 export function Sandbox3D({ htmlContent, isLoading }: Sandbox3DProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { reset } = useAppStore();
+  const [showNLConsole, setShowNLConsole] = useState(false);
 
   if (isLoading) {
     return (
@@ -43,6 +45,18 @@ export function Sandbox3D({ htmlContent, isLoading }: Sandbox3DProps) {
 
       {/* 交互指南 */}
       <InteractionGuide />
+      
+      {/* 自然語言控制台切換按鈕 */}
+      <button
+        onClick={() => setShowNLConsole(!showNLConsole)}
+        className="absolute top-4 right-4 z-50 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all flex items-center gap-2 font-medium"
+      >
+        <span className="text-xl">🤖</span>
+        {showNLConsole ? '隱藏' : '顯示'}自然語言控制台
+      </button>
+      
+      {/* 自然語言控制台 */}
+      {showNLConsole && <NaturalLanguageConsole />}
 
       {/* 全屏 iframe - 安全说明：
           使用 allow-scripts 和 allow-same-origin 组合虽有安全风险，
