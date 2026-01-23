@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { useAppStore } from '../stores/appStore';
 import { InteractionGuide } from './InteractionGuide';
 import { NaturalLanguageConsole } from './NaturalLanguageConsole';
+import { EducationalPanel } from './EducationalPanel';
 
 interface Sandbox3DProps {
   htmlContent: string;
@@ -11,7 +12,7 @@ interface Sandbox3DProps {
 
 export function Sandbox3D({ htmlContent, isLoading }: Sandbox3DProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const { reset } = useAppStore();
+  const { reset, currentConcept } = useAppStore();
   const [showNLConsole, setShowNLConsole] = useState(false);
 
   if (isLoading) {
@@ -43,6 +44,9 @@ export function Sandbox3D({ htmlContent, isLoading }: Sandbox3DProps) {
         返回首页
       </button>
 
+      {/* 学习指南 */}
+      <EducationalPanel concept={currentConcept || ''} />
+      
       {/* 交互指南 */}
       <InteractionGuide />
       

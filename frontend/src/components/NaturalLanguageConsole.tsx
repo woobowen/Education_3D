@@ -1,149 +1,186 @@
-// 自然语言控制台组件
-import { useState } from 'react';
+// 自然语言控制台组件 - 使用 Gemini API
+import { useState, useRef, useEffect } from 'react';
+
+interface Message {
+  type: 'user' | 'system';
+  text: string;
+}
 
 export function NaturalLanguageConsole() {
   const [input, setInput] = useState('');
-  const [history, setHistory] = useState<Array<{ type: 'user' | 'system'; text: string }>>([
-    { type: 'system', text: '👋 欢迎使用自然语言控制台！您可以用中文指令控制演示，例如：' },
-    { type: 'system', text: '• "展示二分查找在无序数组中会发生什么"' },
-    { type: 'system', text: '• "把汉诺塔设为5层并演示最后一步"' },
-    { type: 'system', text: '• "开始演示"、"下一步"、"暂停"等' }
+  const [history, setHistory] = useState<Message[]>([
+    { type: 'system', text: '👋 你好!我是 EduVibe 3D 智能助手。' },
+    { type: 'system', text: '我可以帮助你理解算法、数据结构和编程概念。' },
+    { type: 'system', text: '💡 试试问我:"什么是二分查找?"或"快速排序的时间复杂度是多少?"' }
   ]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // 自动滚动到底部
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [history, streamingMessage]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
-    // 添加用户输入到历史
-    setHistory(prev => [...prev, { type: 'user', text: input }]);
-
-    // 解析指令（这里可以集成更复杂的 NLP 逻辑）
-    const response = parseCommand(input);
-    
-    // 添加系统回应到历史
-    setHistory(prev => [...prev, { type: 'system', text: response }]);
-    
+    const userMessage = input.trim();
     setInput('');
-  };
+    
+    // 添加用户消息
+    setHistory(prev => [...prev, { type: 'user', text: userMessage }]);
+    setIsLoading(true);
+    setStreamingMessage('');
 
-  const parseCommand = (cmd: string): string => {
-    const lower = cmd.toLowerCase();
+    try {
+      const response = await fetch('http://localhost:3000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          history: history.map(msg => ({
+            role: msg.type === 'user' ? 'user' : 'assistant',
+            content: msg.text
+          }))
+        }),
+      });
 
-    // 演示控制
-    if (lower.includes('演示') || lower.includes('播放') || lower.includes('开始')) {
-      postMessageToSandbox({ type: 'autoPlay' });
-      return '✅ 正在自动演示...';
-    }
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-    if (lower.includes('暂停') || lower.includes('停止')) {
-      postMessageToSandbox({ type: 'pause' });
-      return '⏸️ 已暂停演示';
-    }
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
 
-    if (lower.includes('下一步') || lower.includes('继续')) {
-      postMessageToSandbox({ type: 'nextStep' });
-      return '⏭️ 已执行下一步';
-    }
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-    if (lower.includes('上一步') || lower.includes('回退')) {
-      postMessageToSandbox({ type: 'prevStep' });
-      return '⏮️ 已返回上一步';
-    }
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
 
-    if (lower.includes('重置') || lower.includes('重新开始')) {
-      postMessageToSandbox({ type: 'reset' });
-      return '🔄 已重置场景';
-    }
-
-    // 参数设置
-    const arrayMatch = cmd.match(/数组.*?([0-9,，\s]+)/);
-    if (arrayMatch) {
-      const arrayStr = arrayMatch[1].replace(/，/g, ',').trim();
-      postMessageToSandbox({ type: 'setArray', value: arrayStr });
-      return `✅ 已设置数组为: ${arrayStr}`;
-    }
-
-    const layerMatch = cmd.match(/(\d+)\s*层/);
-    if (layerMatch && (lower.includes('汉诺塔'))) {
-      const layers = parseInt(layerMatch[1]);
-      postMessageToSandbox({ type: 'setLayers', value: layers });
-      return `✅ 已设置汉诺塔为 ${layers} 层`;
-    }
-
-    // 视角切换
-    if (lower.includes('上帝视角') || lower.includes('俯视')) {
-      postMessageToSandbox({ type: 'switchToGodView' });
-      return '👁️ 已切换到上帝视角';
-    }
-
-    if (lower.includes('数据视角') || lower.includes('第一人称')) {
-      postMessageToSandbox({ type: 'switchToDataView' });
-      return '🔍  已切换到数据视角';
-    }
-
-    // 特殊场景
-    if (lower.includes('无序') && lower.includes('二分')) {
-      return '💡 好问题！二分查找要求数组必须有序。如果在无序数组上使用二分查找，可能会找不到目标值，即使它确实存在于数组中。让我展示一个例子...';
-    }
-
-    return '❓ 抱歉，我不太理解这个指令。您可以尝试：\n• "开始演示"\n• "下一步"\n• "设置数组为 1,2,3,4,5"\n• "切换到数据视角"';
-  };
-
-  const postMessageToSandbox = (message: any) => {
-    // 尝试向 iframe 发送消息（如果需要与 3D 场景通信）
-    const iframe = document.querySelector('iframe');
-    if (iframe && iframe.contentWindow) {
-      iframe.contentWindow.postMessage(message, '*');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.type === 'progress') {
+                  fullResponse += data.content;
+                  setStreamingMessage(fullResponse);
+                } else if (data.type === 'complete') {
+                  fullResponse = data.content;
+                  setStreamingMessage('');
+                  setHistory(prev => [...prev, { type: 'system', text: fullResponse }]);
+                } else if (data.type === 'error') {
+                  setStreamingMessage('');
+                  setHistory(prev => [...prev, { 
+                    type: 'system', 
+                    text: `❌ 错误: ${data.message}` 
+                  }]);
+                }
+              } catch (e) {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('聊天错误:', error);
+      setStreamingMessage('');
+      setHistory(prev => [...prev, { 
+        type: 'system', 
+        text: `❌ 连接失败: ${error instanceof Error ? error.message : '未知错误'}` 
+      }]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="fixed right-6 bottom-6 w-96 h-96 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border-2 border-purple-200">
+    <div className="fixed right-6 bottom-6 w-96 h-[32rem] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border-2 border-purple-200 z-50">
       {/* 标题栏 */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-3 flex items-center gap-2">
+      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-3 flex items-center gap-2 flex-shrink-0">
         <span className="text-xl">🤖</span>
-        <h3 className="font-semibold">自然语言控制台</h3>
+        <h3 className="font-semibold">智能助手 (Gemini)</h3>
       </div>
 
       {/* 对话历史 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
         {history.map((msg, idx) => (
           <div
             key={idx}
             className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[80%] px-4 py-2 rounded-2xl ${
+              className={`max-w-[85%] px-4 py-2 rounded-2xl ${
                 msg.type === 'user'
                   ? 'bg-purple-600 text-white'
-                  : 'bg-white text-gray-800 border border-gray-200'
+                  : 'bg-white text-gray-800 border border-gray-200 shadow-sm'
               }`}
             >
-              <p className="text-sm whitespace-pre-line">{msg.text}</p>
+              <p className="text-sm whitespace-pre-line leading-relaxed">{msg.text}</p>
             </div>
           </div>
         ))}
+        
+        {/* 显示正在流式输出的消息 */}
+        {streamingMessage && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] px-4 py-2 rounded-2xl bg-white text-gray-800 border border-gray-200 shadow-sm">
+              <p className="text-sm whitespace-pre-line leading-relaxed">{streamingMessage}</p>
+              <span className="inline-block w-2 h-4 bg-purple-600 animate-pulse ml-1"></span>
+            </div>
+          </div>
+        )}
+        
+        {/* 加载指示器 */}
+        {isLoading && !streamingMessage && (
+          <div className="flex justify-start">
+            <div className="bg-white text-gray-800 border border-gray-200 px-4 py-2 rounded-2xl shadow-sm">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-purple-600 rounded-full animate-bounce"></span>
+                <span className="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
+                <span className="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div ref={messagesEndRef} />
       </div>
 
       {/* 输入框 */}
-      <form onSubmit={handleSubmit} className="p-4 bg-white border-t border-gray-200">
+      <form onSubmit={handleSubmit} className="p-4 bg-white border-t border-gray-200 flex-shrink-0">
         <div className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="输入指令，例如：开始演示"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
+            placeholder="问我任何关于编程的问题..."
+            disabled={isLoading}
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
           />
           <button
             type="submit"
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            disabled={isLoading || !input.trim()}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
           >
             发送
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          💡 提示：试试 "开始演示"、"下一步"、"设置数组为 5,2,8,1,9"
+          💡 提示：试试问"什么是快速排序?"
         </p>
       </form>
     </div>

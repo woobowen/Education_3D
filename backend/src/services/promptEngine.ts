@@ -68,25 +68,32 @@ export function buildSystemPrompt(): string {
 
 ## 🔧 常见算法的特殊处理
 
-### 二叉树可视化（必须实现动态连线！）
-- **节点存储**：使用对象存储节点信息和连线
-\`\`\`javascript
-const treeNodes = [];  // 存储所有节点
-const nodeMap = new Map();  // 用于快速查找：value -> node
-const edgeLines = [];  // 存储所有连接线
+### 二叉树可视化（必须完整实现！）【重要：节点值必须匹配】
 
-// 创建节点（使用高级材质）
-function createTreeNode(value, x, y, z) {
-    const geometry = new THREE.SphereGeometry(0.5, 32, 32);
-    // 使用通透材质（体现数学纯粹感）
+**⚠️ 关键要求（不可遗漏）**:
+1. **节点值必须精确匹配**：用户输入什么值就显示什么值
+2. **必须显示遍历序号**：在节点旁边显示访问顺序（1, 2, 3...）
+3. **必须实现连线**：使用 Line 连接父节点和子节点
+4. **必须使用颜色区分状态**：未访问/正在访问/已访问
+
+- **完整实现模板（强制遵循）**
+\`\`\`javascript
+// ========== 二叉树全局变量 ==========
+const treeNodes = [];  // 存储所有节点对象
+const nodeMap = new Map();  // 值 -> 节点对象的映射
+const edgeLines = [];  // 存储所有连线
+let visitOrder = 0;  // 访问计数器
+
+// ========== 创建节点（必须显示值和序号）==========
+function createTreeNode(value, x, y, z, index) {
+    // 节点球体
+    const geometry = new THREE.SphereGeometry(0.6, 32, 32);
     const material = new THREE.MeshStandardMaterial({ 
-        color: 0x667eea,
+        color: 0x94a3b8,  // 默认灰色（未访问）
         roughness: 0.3,
         metalness: 0.2,
-        transparent: true,
-        opacity: 0.9,
-        emissive: 0x667eea,
-        emissiveIntensity: 0.1
+        emissive: new THREE.Color(0x000000),
+        emissiveIntensity: 0
     });
     const sphere = new THREE.Mesh(geometry, material);
     sphere.position.set(x, y, z);
@@ -94,20 +101,119 @@ function createTreeNode(value, x, y, z) {
     sphere.receiveShadow = true;
     scene.add(sphere);
     
+    // ✅ 重要：显示节点值（必须精确匹配）
+    const valueLabel = createLabel(value.toString(), '#1e293b');
+    valueLabel.position.set(0, 0, 0);  // 中心位置
+    sphere.add(valueLabel);
+    
+    // ✅ 重要：显示节点索引（方便识别）
+    const indexLabel = createLabel(\`[\${index}]\`, '#64748b');
+    indexLabel.position.set(0, -0.9, 0);  // 下方
+    sphere.add(indexLabel);
+    
+    // 创建序号标签（初始隐藏，访问时显示）
+    const orderLabel = createLabel('', '#f59e0b');
+    orderLabel.position.set(1.2, 0, 0);  // 右侧
+    orderLabel.visible = false;
+    sphere.add(orderLabel);
+    
+    // 节点数据对象
     const nodeData = {
         mesh: sphere,
         value: value,
+        index: index,
         x: x,
         y: y,
         z: z,
-        left: null,  // 左子节点引用
-        right: null  // 右子节点引用
+        valueLabel: valueLabel,
+        indexLabel: indexLabel,
+        orderLabel: orderLabel,  // 访问序号标签
+        visitOrder: null,  // 访问顺序（初始为 null）
+        left: null,   // 左子节点引用
+        right: null   // 右子节点引用
     };
     
     treeNodes.push(nodeData);
     nodeMap.set(value, nodeData);
     
     return nodeData;
+}
+
+// ========== 创建完整二叉树 ==========
+function createBinaryTree(values) {
+    // 清空旧数据
+    treeNodes.forEach(node => {
+        if (node && node.mesh && node.mesh.parent) {
+            scene.remove(node.mesh);
+            if (node.mesh.geometry) node.mesh.geometry.dispose();
+            if (node.mesh.material) node.mesh.material.dispose();
+        }
+    });
+    edgeLines.forEach(edge => {
+        if (edge && edge.line && edge.line.parent) {
+            scene.remove(edge.line);
+            if (edge.line.geometry) edge.line.geometry.dispose();
+            if (edge.line.material) edge.line.material.dispose();
+        }
+    });
+    
+    treeNodes.length = 0;
+    nodeMap.clear();
+    edgeLines.length = 0;
+    visitOrder = 0;
+    
+    if (!values || values.length === 0) {
+        console.warn('⚠️ 值数组为空');
+        return null;
+    }
+    
+    // ✅ 重要：使用用户输入的值（不修改）
+    console.log('创建二叉树，值：', values);
+    
+    // 计算节点位置（层次布局）
+    const levelGap = 3;  // 层间距
+    const horizontalSpacing = 2;  // 水平间距
+    
+    // 计算树的高度
+    const maxDepth = Math.floor(Math.log2(values.length)) + 1;
+    
+    // 创建所有节点
+    values.forEach((value, index) => {
+        // 计算位置（完全二叉树公式）
+        const level = Math.floor(Math.log2(index + 1));  // 层级（0-based）
+        const positionInLevel = index - (Math.pow(2, level) - 1);  // 在该层的位置
+        const nodesInLevel = Math.pow(2, level);  // 该层节点总数
+        
+        // X 坐标：居中分布
+        const totalWidth = (nodesInLevel - 1) * horizontalSpacing * Math.pow(2, maxDepth - level - 1);
+        const x = -totalWidth / 2 + positionInLevel * horizontalSpacing * Math.pow(2, maxDepth - level - 1);
+        
+        // Y 坐标：从上往下
+        const y = (maxDepth - level - 1) * levelGap;
+        
+        const node = createTreeNode(value, x, y, 0, index);
+        
+        // 建立父子关系
+        if (index > 0) {
+            const parentIndex = Math.floor((index - 1) / 2);
+            const parentNode = treeNodes[parentIndex];
+            
+            if (parentNode) {
+                // 左子节点或右子节点
+                if (index % 2 === 1) {
+                    parentNode.left = node;
+                } else {
+                    parentNode.right = node;
+                }
+                
+                // 创建连线
+                createEdgeLine(parentNode, node, index % 2 === 1);
+            }
+        }
+    });
+    
+    console.log(\`✅ 已创建 \${treeNodes.length} 个节点和 \${edgeLines.length} 条连线\`);
+    return treeNodes[0];  // 返回根节点
 }
 
 // **核心功能：创建动态连接线（数据流隐喻）**
@@ -168,17 +274,94 @@ function animateEdge(edge, duration = 1000) {
     });
 }
 
-// 安全的节点高亮
-function highlightNode(value, color) {
-    const node = nodeMap.get(value);
-    if (!node || !node.mesh || !node.mesh.material) {
-        console.warn('Node not found or invalid:', value);
+// ========== 访问节点（显示序号）==========
+function visitNode(nodeIndex, order) {
+    if (nodeIndex < 0 || nodeIndex >= treeNodes.length) {
+        console.warn('节点索引无效:', nodeIndex);
         return;
     }
+    
+    const node = treeNodes[nodeIndex];
+    if (!node || !node.mesh || !node.mesh.material) {
+        console.warn('节点对象无效:', nodeIndex);
+        return;
+    }
+    
+    // 设置访问顺序
+    node.visitOrder = order;
+    
+    // 更新颜色：正在访问（橙色）
+    node.mesh.material.color.set(0xf59e0b);
+    node.mesh.material.emissive.set(0xf59e0b);
+    node.mesh.material.emissiveIntensity = 0.4;
+    
+    // ✅ 显示访问序号
+    if (node.orderLabel) {
+        node.orderLabel.element.textContent = order.toString();
+        node.orderLabel.element.style.background = 'rgba(251, 191, 36, 0.9)';
+        node.orderLabel.element.style.color = 'white';
+        node.orderLabel.element.style.fontWeight = 'bold';
+        node.orderLabel.element.style.fontSize = '20px';
+        node.orderLabel.element.style.padding = '8px 12px';
+        node.orderLabel.element.style.borderRadius = '50%';
+        node.orderLabel.element.style.border = '2px solid white';
+        node.orderLabel.visible = true;
+    }
+    
+    console.log(\`✅ 访问节点 [\${nodeIndex}] 值=\${node.value} 序号=\${order}\`);
+}
+
+// ========== 标记节点为已访问 ==========
+function markNodeVisited(nodeIndex) {
+    if (nodeIndex < 0 || nodeIndex >= treeNodes.length) return;
+    
+    const node = treeNodes[nodeIndex];
+    if (!node || !node.mesh || !node.mesh.material) return;
+    
+    // 更新颜色：已访问（绿色）
+    node.mesh.material.color.set(0x10b981);
+    node.mesh.material.emissive.set(0x10b981);
+    node.mesh.material.emissiveIntensity = 0.2;
+}
+
+// ========== 安全的节点高亮（通用）==========
+function highlightNode(nodeIndex, color, emissiveIntensity = 0.3) {
+    if (nodeIndex < 0 || nodeIndex >= treeNodes.length) {
+        console.warn('节点索引无效:', nodeIndex);
+        return;
+    }
+    
+    const node = treeNodes[nodeIndex];
+    if (!node || !node.mesh || !node.mesh.material) {
+        console.warn('节点对象无效:', nodeIndex);
+        return;
+    }
+    
     node.mesh.material.color.set(color);
-    // 添加发光效果
     node.mesh.material.emissive.set(color);
-    node.mesh.material.emissiveIntensity = 0.3;
+    node.mesh.material.emissiveIntensity = emissiveIntensity;
+}
+
+// ========== 重置所有节点（清除访问状态）==========
+function resetAllNodes() {
+    visitOrder = 0;
+    
+    treeNodes.forEach(node => {
+        if (!node || !node.mesh || !node.mesh.material) return;
+        
+        // 重置颜色
+        node.mesh.material.color.set(0x94a3b8);
+        node.mesh.material.emissive.set(0x000000);
+        node.mesh.material.emissiveIntensity = 0;
+        
+        // 隐藏序号标签
+        if (node.orderLabel) {
+            node.orderLabel.visible = false;
+        }
+        
+        // 清除访问顺序
+        node.visitOrder = null;
+    });
 }
 
 // **生命周期管理：清理函数（防止内存泄漏和重影）**
@@ -206,29 +389,140 @@ function disposeTree() {
 }
 \`\`\`
 
-### 汉诺塔可视化（金属质感 + 错误检测）
-- **使用金属材质和 TWEEN.js 实现平滑移动**
+### 汉诺塔可视化（金属质感 + 错误检测）【必须完整实现！】
+
+**⚠️ 关键要求（不可遗漏）**:
+1. **必须创建 3 根柱子**：使用 CylinderGeometry 创建柱子作为基础
+2. **必须创建 n 个盘子**：根据用户输入的层数创建
+3. **必须实现移动动画**：使用 TWEEN.js 实现 上升-横移-下降 三段动画
+4. **必须添加错误检测**：大盘不能放在小盘上
+
+- **完整实现模板（强制遵循）**
 \`\`\`javascript
-// 创建汉诺塔盘子（金属光泽材质）
-function createDisk(size, color) {
-    const radius = 0.3 + size * 0.2;
-    const geometry = new THREE.CylinderGeometry(radius, radius, 0.2, 32);
+// ========== 汉诺塔全局变量 ==========
+const pegs = [];  // 存储 3 根柱子
+const disks = [];  // 存储所有盘子
+const pegPositions = [-4, 0, 4];  // 3 根柱子的 X 坐标
+const pegStacks = [[], [], []];  // 3 个柱子上的盘子栈
+
+// ========== 创建柱子（必须！）==========
+function createPegs() {
+    // 清空旧柱子
+    pegs.forEach(peg => {
+        if (peg && peg.parent) {
+            scene.remove(peg);
+            if (peg.geometry) peg.geometry.dispose();
+            if (peg.material) peg.material.dispose();
+        }
+    });
+    pegs.length = 0;
     
-    // 使用金属材质（各向异性过滤效果）
-    const material = new THREE.MeshStandardMaterial({
-        color: color,
-        roughness: 0.2,
-        metalness: 0.8,
-        emissive: color,
-        emissiveIntensity: 0.05
+    // 创建 3 根柱子
+    pegPositions.forEach((x, index) => {
+        // 柱子几何体：radius, height, radialSegments
+        const pegGeometry = new THREE.CylinderGeometry(0.2, 0.2, 6, 16);
+        const pegMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8b4513,  // 棕色
+            roughness: 0.5,
+            metalness: 0.2
+        });
+        
+        const peg = new THREE.Mesh(pegGeometry, pegMaterial);
+        peg.position.set(x, 3, 0);  // 柱子中心在 y=3
+        peg.castShadow = true;
+        peg.receiveShadow = true;
+        scene.add(peg);
+        
+        pegs.push(peg);
+        
+        // 添加柱子标签（A, B, C）
+        const label = createLabel(['A', 'B', 'C'][index], '#8b4513');
+        label.position.set(0, -3.5, 0);
+        peg.add(label);
     });
     
-    const disk = new THREE.Mesh(geometry, material);
-    disk.castShadow = true;
-    disk.receiveShadow = true;
-    disk.userData.size = size;  // 存储大小信息
+    console.log('✅ 已创建', pegs.length, '根柱子');
+}
+
+// ========== 创建盘子 ==========
+function createDisks(numDisks = 3) {
+    // 清空旧盘子
+    disks.forEach(disk => {
+        if (disk && disk.parent) {
+            scene.remove(disk);
+            if (disk.geometry) disk.geometry.dispose();
+            if (disk.material) disk.material.dispose();
+        }
+    });
+    disks.length = 0;
     
-    return disk;
+    // 清空柱子栈
+    pegStacks.forEach(stack => stack.length = 0);
+    
+    // 创建 n 个盘子（从大到小）
+    const colors = [0xff6b6b, 0xf06595, 0xcc5de8, 0x845ef7, 0x5c7cfa, 0x339af0, 0x22b8cf];
+    
+    for (let i = 0; i < numDisks; i++) {
+        const size = numDisks - i;  // 大小：从大(n)到小(1)
+        const radius = 0.4 + size * 0.3;  // 半径递减
+        
+        // 创建盘子几何体
+        const geometry = new THREE.CylinderGeometry(radius, radius, 0.3, 32);
+        
+        // 使用金属材质
+        const color = colors[i % colors.length];
+        const material = new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: 0.2,
+            metalness: 0.8,
+            emissive: color,
+            emissiveIntensity: 0.05
+        });
+        
+        const disk = new THREE.Mesh(geometry, material);
+        disk.castShadow = true;
+        disk.receiveShadow = true;
+        disk.userData.size = size;  // 存储大小（重要！）
+        disk.userData.index = i;    // 存储索引
+        
+        // 初始位置：放在第一根柱子上
+        const y = 0.15 + i * 0.3;  // 从底部开始堆叠
+        disk.position.set(pegPositions[0], y, 0);
+        
+        scene.add(disk);
+        disks.push(disk);
+        pegStacks[0].push(disk);  // 添加到第一根柱子的栈
+        
+        // 添加盘子标签
+        const label = createLabel(size.toString(), '#ffffff');
+        label.position.set(0, 0, 0);
+        disk.add(label);
+    }
+    
+    console.log('✅ 已创建', disks.length, '个盘子');
+}
+
+// ========== 获取柱子顶部高度 ==========
+function getPegTopHeight(pegIndex) {
+    const stack = pegStacks[pegIndex];
+    if (stack.length === 0) {
+        return 0;  // 柱子为空，高度为 0
+    }
+    return 0.15 + stack.length * 0.3;
+}
+
+// ========== 验证移动合法性 ==========
+function isValidMove(disk, toPegIndex) {
+    const stack = pegStacks[toPegIndex];
+    
+    // 如果目标柱为空，可以移动
+    if (stack.length === 0) return true;
+    
+    // 获取目标柱顶部盘子
+    const topDisk = stack[stack.length - 1];
+    
+    // 检查：只能把小盘子放在大盘子上
+    return disk.userData.size < topDisk.userData.size;
 }
 
 // 验证移动合法性（错误情境检测）
@@ -249,32 +543,81 @@ function isValidMove(disk, targetPeg) {
     return true;
 }
 
-// 移动圆盘（带动画和错误检测）
-async function moveDiskWithAnimation(disk, fromPeg, toPeg) {
-    // **错误检测**
-    if (!isValidMove(disk, toPeg)) {
-        // 触发红色警报视觉特效
-        await showErrorFeedback(disk, toPeg);
-        return false;  // 阻止移动
+// ========== 移动盘子（三段动画：上升-横移-下降）==========
+async function moveDiskWithAnimation(diskIndex, fromPegIndex, toPegIndex) {
+    const disk = disks[diskIndex];
+    if (!disk) {
+        console.error('盘子不存在:', diskIndex);
+        return false;
     }
     
-    // 上升
+    // **错误检测**
+    if (!isValidMove(disk, toPegIndex)) {
+        await showErrorFeedback(disk, toPegIndex);
+        return false;
+    }
+    
+    // 更新柱子栈状态
+    const fromStack = pegStacks[fromPegIndex];
+    const toStack = pegStacks[toPegIndex];
+    
+    // 从源柱子移除
+    const removeIndex = fromStack.indexOf(disk);
+    if (removeIndex !== -1) {
+        fromStack.splice(removeIndex, 1);
+    }
+    
+    // 1. 上升阶段
+    const riseHeight = 7;  // 上升到足够高的位置
     await tweenPosition(disk, { 
-        y: disk.position.y + 3 
+        y: riseHeight 
     }, 500);
     
-    // 横向移动
+    // 2. 横向移动
+    const targetX = pegPositions[toPegIndex];
     await tweenPosition(disk, { 
-        x: getPegX(toPeg) 
+        x: targetX 
     }, 800);
     
-    // 下降
-    const targetY = getStackHeight(toPeg);
+    // 3. 下降阶段
+    const targetY = getPegTopHeight(toPegIndex);
     await tweenPosition(disk, { 
         y: targetY 
     }, 500);
     
-    return true;  // 移动成功
+    // 添加到目标柱子
+    toStack.push(disk);
+    
+    return true;
+}
+
+// ========== TWEEN 位置动画 ==========
+function tweenPosition(object, targetPos, duration) {
+    return new Promise(resolve => {
+        const start = { 
+            x: object.position.x, 
+            y: object.position.y, 
+            z: object.position.z 
+        };
+        
+        // 合并目标位置（只更新提供的坐标）
+        const target = {
+            x: targetPos.x !== undefined ? targetPos.x : start.x,
+            y: targetPos.y !== undefined ? targetPos.y : start.y,
+            z: targetPos.z !== undefined ? targetPos.z : start.z
+        };
+        
+        new TWEEN.Tween(start)
+            .to(target, duration)
+            .easing(TWEEN.Easing.Quadratic.InOut)
+            .onUpdate(() => {
+                object.position.set(start.x, start.y, start.z);
+            })
+            .onComplete(() => {
+                resolve(null);
+            })
+            .start();
+    });
 }
 
 // **错误反馈视觉效果（红色警报 + 震动）**
@@ -1087,47 +1430,138 @@ function tweenPosition(object, target, duration) {
             labelRenderer.setSize(container.clientWidth, container.clientHeight);
         });
         
-        // ========== 视角切换功能 ==========
+        // ========== 视角切换功能（增强版 - 带安全检查）==========
         
-        // 上帝视角（默认俯视/侧视）
+        // 当前视角状态
+        let currentView = 'god';  // 'god' 或 'data'
+        let isTransitioning = false;  // 防止重复切换
+        
+        // 上帝视角（默认俯视）
         window.switchToGodView = function() {
+            if (isTransitioning) {
+                console.log('⚠️ 视角切换中，请稍候...');
+                return;
+            }
+            
+            if (currentView === 'god') {
+                console.log('✅ 已经是上帝视角');
+                return;
+            }
+            
+            isTransitioning = true;
+            currentView = 'god';
+            
+            console.log('🌍 切换到上帝视角');
+            
+            // 平滑移动相机
             new TWEEN.Tween(camera.position)
                 .to({ x: 0, y: 8, z: 12 }, 1500)
                 .easing(TWEEN.Easing.Cubic.InOut)
+                .onComplete(() => {
+                    isTransitioning = false;
+                    console.log('✅ 上帝视角切换完成');
+                })
                 .start();
             
+            // 平滑移动目标点
             new TWEEN.Tween(controls.target)
                 .to({ x: 0, y: 0, z: 0 }, 1500)
                 .easing(TWEEN.Easing.Cubic.InOut)
                 .start();
         };
         
-        // 数据视角（第一人称，进入场景内部）
+        // 数据视角（近距离观察）
         window.switchToDataView = function() {
-            // 找到第一个数据元素
-            if (dataElements.length > 0) {
-                const firstElement = dataElements[0];
-                if (firstElement) {
-                    // 相机移动到数据元素旁边
-                    new TWEEN.Tween(camera.position)
-                        .to({ 
-                            x: firstElement.position.x + 2, 
-                            y: firstElement.position.y + 1, 
-                            z: firstElement.position.z + 2 
-                        }, 1500)
-                        .easing(TWEEN.Easing.Cubic.InOut)
-                        .start();
-                    
-                    // 看向该元素
-                    new TWEEN.Tween(controls.target)
-                        .to({ 
-                            x: firstElement.position.x, 
-                            y: firstElement.position.y, 
-                            z: firstElement.position.z 
-                        }, 1500)
-                        .easing(TWEEN.Easing.Cubic.InOut)
-                        .start();
+            if (isTransitioning) {
+                console.log('⚠️ 视角切换中，请稍候...');
+                return;
+            }
+            
+            if (currentView === 'data') {
+                console.log('✅ 已经是数据视角');
+                return;
+            }
+            
+            // 查找第一个有效的数据元素
+            let targetElement = null;
+            
+            // 优先查找数组元素
+            if (dataElements && dataElements.length > 0) {
+                for (let i = 0; i < dataElements.length; i++) {
+                    if (dataElements[i] && dataElements[i].position) {
+                        targetElement = dataElements[i];
+                        break;
+                    }
                 }
+            }
+            
+            // 如果没有数组元素，查找树节点
+            if (!targetElement && treeNodes && treeNodes.length > 0) {
+                for (let i = 0; i < treeNodes.length; i++) {
+                    if (treeNodes[i] && treeNodes[i].mesh && treeNodes[i].mesh.position) {
+                        targetElement = treeNodes[i].mesh;
+                        break;
+                    }
+                }
+            }
+            
+            // 如果没有找到任何元素，查找盘子
+            if (!targetElement && disks && disks.length > 0) {
+                for (let i = 0; i < disks.length; i++) {
+                    if (disks[i] && disks[i].position) {
+                        targetElement = disks[i];
+                        break;
+                    }
+                }
+            }
+            
+            if (!targetElement) {
+                console.warn('⚠️ 未找到数据元素，无法切换数据视角');
+                return;
+            }
+            
+            isTransitioning = true;
+            currentView = 'data';
+            
+            console.log('🔍 切换到数据视角');
+            
+            // 计算目标位置（在元素前方稍远处）
+            const targetPos = targetElement.position;
+            const offsetX = 3;
+            const offsetY = 2;
+            const offsetZ = 3;
+            
+            // 平滑移动相机
+            new TWEEN.Tween(camera.position)
+                .to({ 
+                    x: targetPos.x + offsetX, 
+                    y: targetPos.y + offsetY, 
+                    z: targetPos.z + offsetZ 
+                }, 1500)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .onComplete(() => {
+                    isTransitioning = false;
+                    console.log('✅ 数据视角切换完成');
+                })
+                .start();
+            
+            // 看向该元素
+            new TWEEN.Tween(controls.target)
+                .to({ 
+                    x: targetPos.x, 
+                    y: targetPos.y, 
+                    z: targetPos.z 
+                }, 1500)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .start();
+        };
+        
+        // 切换视角（在两种视角间切换）
+        window.toggleView = function() {
+            if (currentView === 'god') {
+                window.switchToDataView();
+            } else {
+                window.switchToGodView();
             }
         };
         
@@ -1516,6 +1950,741 @@ function moveDisk(disk, targetPosition) {
 }
 \`\`\`
 
+## 📚 完整算法示例库（参考实现）
+
+### 示例 1：二分查找（完整实现）
+以下是一个经过验证的完整实现，展示了所有最佳实践：
+
+\`\`\`html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>二分查找 - 交互式教学演示</title>
+    <script src="http://localhost:3000/libs/three.min.js"></script>
+    <script src="http://localhost:3000/libs/OrbitControls.js"></script>
+    <script src="http://localhost:3000/libs/CSS2DRenderer.js"></script>
+    <script src="http://localhost:3000/libs/tween.umd.js"></script>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+            overflow: hidden; 
+        }
+        
+        #canvas-container {
+            position: absolute;
+            left: 0; top: 0;
+            width: 75%; height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        #control-panel {
+            position: absolute;
+            right: 0; top: 0;
+            width: 25%; height: 100%;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
+            color: white;
+            overflow-y: auto;
+            padding: 30px 20px;
+        }
+        
+        .control-btn {
+            width: 100%;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .control-btn:hover { 
+            background: rgba(255,255,255,0.3); 
+            transform: translateY(-2px); 
+        }
+        
+        .control-btn.primary {
+            background: rgba(255,255,255,0.9);
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .param-input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: none;
+            margin-top: 5px;
+        }
+        
+        .section {
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        #step-info {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-radius: 10px;
+            line-height: 1.8;
+        }
+        
+        #step-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #fbbf24;
+        }
+        
+        #step-description {
+            font-size: 14px;
+            opacity: 0.95;
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #fbbf24;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div id="control-panel">
+        <h2 style="font-size: 24px; margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 10px;">📚 二分查找</h2>
+        
+        <div class="section">
+            <h3 style="font-size: 18px; margin-bottom: 10px;">⚙️ 参数设置</h3>
+            <label style="font-size: 13px; display: block; margin-bottom: 5px;">输入数组（逗号分隔）</label>
+            <input type="text" class="param-input" id="input-array" value="1,3,5,7,9,11,13,15" placeholder="必须是有序数组">
+            <label style="font-size: 13px; display: block; margin: 10px 0 5px;">目标值</label>
+            <input type="number" class="param-input" id="target-value" value="7">
+            <button class="control-btn primary" onclick="applyParameters()">✓ 应用参数</button>
+        </div>
+        
+        <div class="section">
+            <h3 style="font-size: 18px; margin-bottom: 10px;">🎮 演示控制</h3>
+            <button class="control-btn primary" onclick="autoPlay()">▶️ 自动演示</button>
+            <button class="control-btn" onclick="pause()">⏸️ 暂停</button>
+            <div style="display: flex; gap: 8px;">
+                <button class="control-btn" onclick="prevStep()" style="width: 48%;">⏮️ 上一步</button>
+                <button class="control-btn" onclick="nextStep()" style="width: 48%;">下一步 ⏭️</button>
+            </div>
+            <button class="control-btn" onclick="reset()">🔄 重置</button>
+            <div style="margin-top: 10px;">
+                <span id="step-counter" style="font-size: 13px;">0/0</span>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3 style="font-size: 18px; margin-bottom: 10px;">📖 当前步骤</h3>
+            <div id="step-info">
+                <div id="step-title">准备开始</div>
+                <div id="step-description">点击"自动演示"开始学习二分查找算法</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ========== 全局状态 ==========
+        let currentStep = 0;
+        let isPlaying = false;
+        let animationSpeed = 2000;
+        let steps = [];
+        let dataElements = [];
+        let dataLabels = [];
+        let pointers = [];
+        let currentArray = [];
+        let targetValue = 7;
+        
+        // ========== Three.js 初始化 ==========
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f4f8);
+        
+        const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(0, 5, 10);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+        
+        const labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize(container.clientWidth, container.clientHeight);
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0';
+        labelRenderer.domElement.style.left = '0';
+        labelRenderer.domElement.style.pointerEvents = 'none';
+        container.appendChild(labelRenderer.domElement);
+        
+        // 灯光
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 5);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        
+        // ========== 创建标签 ==========
+        function createLabel(text, color = '#1e293b') {
+            const div = document.createElement('div');
+            div.textContent = text;
+            div.style.color = color;
+            div.style.fontSize = '18px';
+            div.style.fontWeight = 'bold';
+            div.style.padding = '4px 8px';
+            div.style.background = 'rgba(255, 255, 255, 0.9)';
+            div.style.borderRadius = '6px';
+            div.style.border = '2px solid rgba(0,0,0,0.1)';
+            return new CSS2DObject(div);
+        }
+        
+        // ========== 高亮元素 ==========
+        function highlightElement(index, color, emissiveIntensity = 0.3) {
+            if (index < 0 || index >= dataElements.length) return;
+            const element = dataElements[index];
+            if (!element || !element.material) return;
+            
+            element.material.color.set(color);
+            element.material.emissive.set(color);
+            element.material.emissiveIntensity = emissiveIntensity;
+        }
+        
+        // ========== 显示/隐藏指针 ==========
+        function showPointer(pointerIndex, arrayIndex, label) {
+            if (pointerIndex >= pointers.length || arrayIndex >= dataElements.length) return;
+            
+            const pointer = pointers[pointerIndex];
+            const element = dataElements[arrayIndex];
+            if (!pointer || !element) return;
+            
+            pointer.visible = true;
+            pointer.position.x = element.position.x;
+            
+            // 更新标签
+            if (pointer.children[0]) {
+                pointer.children[0].element.textContent = label;
+            }
+        }
+        
+        function hidePointer(pointerIndex) {
+            if (pointerIndex >= pointers.length) return;
+            const pointer = pointers[pointerIndex];
+            if (pointer) pointer.visible = false;
+        }
+        
+        // ========== 定义步骤 ==========
+        function defineSteps() {
+            const left = 0;
+            const right = currentArray.length - 1;
+            let l = left;
+            let r = right;
+            
+            steps = [
+                {
+                    title: "步骤 1: 初始化指针",
+                    description: \`设置左指针 left = \${left}，右指针 right = \${right}。这是搜索的起始状态，我们将在这个范围内查找目标值 \${targetValue}。\`,
+                    animate: function() {
+                        // 重置所有颜色
+                        for (let i = 0; i < dataElements.length; i++) {
+                            highlightElement(i, 0x94a3b8, 0);
+                        }
+                        // 显示左右指针
+                        showPointer(0, l, 'L');
+                        showPointer(1, r, 'R');
+                        hidePointer(2);
+                        
+                        // 高亮搜索范围
+                        for (let i = l; i <= r; i++) {
+                            highlightElement(i, 0x60a5fa, 0.1);
+                        }
+                    }
+                }
+            ];
+            
+            // 模拟二分查找过程
+            let stepNum = 2;
+            while (l <= r) {
+                const mid = Math.floor((l + r) / 2);
+                const midValue = currentArray[mid];
+                
+                // 添加计算中点步骤
+                steps.push({
+                    title: \`步骤 \${stepNum}: 计算中点\`,
+                    description: \`计算中点位置：mid = Math.floor((left + right) / 2) = Math.floor((\${l} + \${r}) / 2) = \${mid}。中点的值是 \${midValue}。\`,
+                    animate: function() {
+                        const capturedMid = mid;
+                        const capturedL = l;
+                        const capturedR = r;
+                        
+                        // 高亮搜索范围
+                        for (let i = 0; i < dataElements.length; i++) {
+                            if (i >= capturedL && i <= capturedR) {
+                                highlightElement(i, 0x60a5fa, 0.1);
+                            } else {
+                                highlightElement(i, 0x94a3b8, 0);
+                            }
+                        }
+                        
+                        // 显示指针
+                        showPointer(0, capturedL, 'L');
+                        showPointer(1, capturedR, 'R');
+                        showPointer(2, capturedMid, 'M');
+                        
+                        // 高亮中点
+                        highlightElement(capturedMid, 0xf59e0b, 0.4);
+                    }
+                });
+                
+                stepNum++;
+                
+                // 添加比较步骤
+                if (midValue === targetValue) {
+                    steps.push({
+                        title: \`步骤 \${stepNum}: 找到目标！\`,
+                        description: \`数组[\${mid}] = \${midValue} 等于目标值 \${targetValue}！搜索成功，目标值位于索引 \${mid}。\`,
+                        animate: function() {
+                            const capturedMid = mid;
+                            highlightElement(capturedMid, 0x10b981, 0.5);
+                            showPointer(2, capturedMid, '✓');
+                        }
+                    });
+                    break;
+                } else if (midValue < targetValue) {
+                    steps.push({
+                        title: \`步骤 \${stepNum}: 搜索右半部分\`,
+                        description: \`数组[\${mid}] = \${midValue} 小于目标值 \${targetValue}，说明目标值在右半部分。更新 left = mid + 1 = \${mid + 1}。\`,
+                        animate: function() {
+                            const capturedMid = mid;
+                            const newLeft = mid + 1;
+                            
+                            // 灰化左半部分
+                            for (let i = 0; i <= capturedMid; i++) {
+                                highlightElement(i, 0xd1d5db, 0);
+                            }
+                            
+                            // 高亮新的搜索范围
+                            for (let i = newLeft; i <= r; i++) {
+                                highlightElement(i, 0x60a5fa, 0.1);
+                            }
+                            
+                            showPointer(0, newLeft, 'L');
+                        }
+                    });
+                    l = mid + 1;
+                } else {
+                    steps.push({
+                        title: \`步骤 \${stepNum}: 搜索左半部分\`,
+                        description: \`数组[\${mid}] = \${midValue} 大于目标值 \${targetValue}，说明目标值在左半部分。更新 right = mid - 1 = \${mid - 1}。\`,
+                        animate: function() {
+                            const capturedMid = mid;
+                            const newRight = mid - 1;
+                            
+                            // 灰化右半部分
+                            for (let i = capturedMid; i < dataElements.length; i++) {
+                                highlightElement(i, 0xd1d5db, 0);
+                            }
+                            
+                            // 高亮新的搜索范围
+                            for (let i = l; i <= newRight; i++) {
+                                highlightElement(i, 0x60a5fa, 0.1);
+                            }
+                            
+                            showPointer(1, newRight, 'R');
+                        }
+                    });
+                    r = mid - 1;
+                }
+                
+                stepNum++;
+            }
+            
+            // 如果没找到
+            if (l > r) {
+                steps.push({
+                    title: "搜索结束：未找到",
+                    description: \`left > right (\${l} > \${r})，搜索范围为空。目标值 \${targetValue} 不存在于数组中。\`,
+                    animate: function() {
+                        for (let i = 0; i < dataElements.length; i++) {
+                            highlightElement(i, 0xef4444, 0.2);
+                        }
+                    }
+                });
+            }
+            
+            updateStepCounter();
+        }
+        
+        // ========== 演示控制 ==========
+        window.autoPlay = function() {
+            if (currentStep >= steps.length) currentStep = 0;
+            isPlaying = true;
+            playNextStep();
+        };
+        
+        function playNextStep() {
+            if (!isPlaying || currentStep >= steps.length) {
+                isPlaying = false;
+                return;
+            }
+            
+            executeStep(currentStep);
+            currentStep++;
+            updateProgress();
+            
+            if (currentStep < steps.length) {
+                setTimeout(playNextStep, animationSpeed);
+            }
+        }
+        
+        window.pause = function() { isPlaying = false; };
+        
+        window.nextStep = function() {
+            isPlaying = false;
+            if (currentStep < steps.length) {
+                executeStep(currentStep);
+                currentStep++;
+                updateProgress();
+            }
+        };
+        
+        window.prevStep = function() {
+            isPlaying = false;
+            if (currentStep > 0) {
+                currentStep--;
+                executeStep(currentStep);
+                updateProgress();
+            }
+        };
+        
+        window.reset = function() {
+            isPlaying = false;
+            currentStep = 0;
+            updateProgress();
+            initScene(currentArray, targetValue);
+            document.getElementById('step-title').textContent = '准备开始';
+            document.getElementById('step-description').textContent = '点击"自动演示"开始学习';
+        };
+        
+        function executeStep(index) {
+            if (index < 0 || index >= steps.length) return;
+            const step = steps[index];
+            document.getElementById('step-title').textContent = step.title;
+            document.getElementById('step-description').textContent = step.description;
+            step.animate();
+        }
+        
+        function updateProgress() {
+            const progress = steps.length > 0 ? (currentStep / steps.length) * 100 : 0;
+            document.getElementById('progress-fill').style.width = progress + '%';
+            document.getElementById('step-counter').textContent = \`\${currentStep}/\${steps.length}\`;
+        }
+        
+        function updateStepCounter() {
+            document.getElementById('step-counter').textContent = \`0/\${steps.length}\`;
+        }
+        
+        window.applyParameters = function() {
+            const arrayInput = document.getElementById('input-array').value;
+            targetValue = parseInt(document.getElementById('target-value').value);
+            const array = arrayInput.split(',').map(n => parseInt(n.trim()));
+            
+            initScene(array, targetValue);
+            defineSteps();
+            currentStep = 0;
+            isPlaying = false;
+            updateProgress();
+        };
+        
+        // ========== 场景初始化 ==========
+        function initScene(array = [1,3,5,7,9,11,13,15], target = 7) {
+            // 清理
+            dataElements.forEach(obj => {
+                if (obj && obj.parent) {
+                    scene.remove(obj);
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) obj.material.dispose();
+                }
+            });
+            dataLabels.forEach(label => { if (label && label.parent) scene.remove(label); });
+            pointers.forEach(pointer => {
+                if (pointer && pointer.parent) {
+                    scene.remove(pointer);
+                    if (pointer.geometry) pointer.geometry.dispose();
+                    if (pointer.material) pointer.material.dispose();
+                }
+            });
+            
+            dataElements = [];
+            dataLabels = [];
+            pointers = [];
+            currentArray = array;
+            targetValue = target;
+            
+            // 创建数组元素
+            const spacing = 1.5;
+            const startX = -(array.length - 1) * spacing / 2;
+            
+            array.forEach((value, index) => {
+                const height = 2.0;
+                const geometry = new THREE.BoxGeometry(1.2, height, 1.2);
+                const material = new THREE.MeshStandardMaterial({ 
+                    color: 0x94a3b8,
+                    roughness: 0.4,
+                    metalness: 0.3,
+                    emissive: new THREE.Color(0x000000),
+                    emissiveIntensity: 0
+                });
+                const cube = new THREE.Mesh(geometry, material);
+                cube.position.set(startX + index * spacing, height / 2, 0);
+                cube.castShadow = true;
+                scene.add(cube);
+                
+                dataElements[index] = cube;
+                
+                // 数值标签
+                const valueLabel = createLabel(value.toString());
+                valueLabel.position.set(0, height / 2 + 0.3, 0);
+                cube.add(valueLabel);
+                
+                // 索引标签
+                const indexLabel = createLabel(\`[\${index}]\`, '#64748b');
+                indexLabel.position.set(0, -height / 2 - 0.3, 0);
+                cube.add(indexLabel);
+            });
+            
+            // 创建指针
+            const pointerGeometry = new THREE.ConeGeometry(0.3, 0.8, 4);
+            pointerGeometry.rotateX(Math.PI);
+            
+            // 左指针 (L)
+            const leftPointer = new THREE.Mesh(pointerGeometry, new THREE.MeshBasicMaterial({ color: 0x3b82f6 }));
+            leftPointer.position.set(startX, 3, 0);
+            leftPointer.visible = false;
+            const leftLabel = createLabel('L', '#3b82f6');
+            leftLabel.position.set(0, 0.5, 0);
+            leftPointer.add(leftLabel);
+            scene.add(leftPointer);
+            pointers.push(leftPointer);
+            
+            // 右指针 (R)
+            const rightPointer = new THREE.Mesh(pointerGeometry.clone(), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+            rightPointer.position.set(startX, 3, 0);
+            rightPointer.visible = false;
+            const rightLabel = createLabel('R', '#ef4444');
+            rightLabel.position.set(0, 0.5, 0);
+            rightPointer.add(rightLabel);
+            scene.add(rightPointer);
+            pointers.push(rightPointer);
+            
+            // 中点指针 (M)
+            const midPointer = new THREE.Mesh(pointerGeometry.clone(), new THREE.MeshBasicMaterial({ color: 0xf59e0b }));
+            midPointer.position.set(startX, 3, 0);
+            midPointer.visible = false;
+            const midLabel = createLabel('M', '#f59e0b');
+            midLabel.position.set(0, 0.5, 0);
+            midPointer.add(midLabel);
+            scene.add(midPointer);
+            pointers.push(midPointer);
+            
+            // 添加网格
+            const gridHelper = new THREE.GridHelper(20, 20, 0xe2e8f0, 0xf0f4f8);
+            gridHelper.position.y = -0.01;
+            scene.add(gridHelper);
+        }
+        
+        // ========== 动画循环 ==========
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            if (typeof TWEEN !== 'undefined') TWEEN.update();
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+        }
+        
+        // ========== 响应式 ==========
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            labelRenderer.setSize(container.clientWidth, container.clientHeight);
+        });
+        
+        // ========== 消息监听器（用于自然语言控制台通信）==========
+        window.addEventListener('message', function(event) {
+            // 安全检查：确保消息来自同源
+            if (event.origin !== window.location.origin && !event.origin.includes('localhost')) {
+                console.warn('Received message from untrusted origin:', event.origin);
+                return;
+            }
+            
+            const message = event.data;
+            if (!message || typeof message !== 'object') return;
+            
+            console.log('📨 收到消息:', message);
+            
+            // 处理不同类型的命令
+            switch(message.type) {
+                // 演示控制
+                case 'autoPlay':
+                    if (typeof window.autoPlay === 'function') {
+                        window.autoPlay();
+                        console.log('✅ 执行：自动演示');
+                    }
+                    break;
+                    
+                case 'pause':
+                    if (typeof window.pause === 'function') {
+                        window.pause();
+                        console.log('✅ 执行：暂停');
+                    }
+                    break;
+                    
+                case 'nextStep':
+                    if (typeof window.nextStep === 'function') {
+                        window.nextStep();
+                        console.log('✅ 执行：下一步');
+                    }
+                    break;
+                    
+                case 'prevStep':
+                    if (typeof window.prevStep === 'function') {
+                        window.prevStep();
+                        console.log('✅ 执行：上一步');
+                    }
+                    break;
+                    
+                case 'reset':
+                    if (typeof window.reset === 'function') {
+                        window.reset();
+                        console.log('✅ 执行：重置');
+                    }
+                    break;
+                
+                // 参数设置
+                case 'setArray':
+                    if (message.value) {
+                        const inputElement = document.getElementById('input-array');
+                        if (inputElement) {
+                            inputElement.value = message.value;
+                            console.log('✅ 设置数组:', message.value);
+                        }
+                    }
+                    break;
+                    
+                case 'setTarget':
+                    if (message.value !== undefined) {
+                        const targetElement = document.getElementById('target-value');
+                        if (targetElement) {
+                            targetElement.value = message.value.toString();
+                            if (typeof window.applyParameters === 'function') {
+                                window.applyParameters();
+                            }
+                            console.log('✅ 设置目标值:', message.value);
+                        }
+                    }
+                    break;
+                    
+                case 'setLayers':
+                    if (message.value !== undefined) {
+                        // 针对汉诺塔
+                        const layersElement = document.getElementById('num-layers');
+                        if (layersElement) {
+                            layersElement.value = message.value.toString();
+                            if (typeof window.applyParameters === 'function') {
+                                window.applyParameters();
+                            }
+                            console.log('✅ 设置层数:', message.value);
+                        }
+                    }
+                    break;
+                
+                // 视角控制
+                case 'switchToGodView':
+                    if (typeof window.switchToGodView === 'function') {
+                        window.switchToGodView();
+                        console.log('✅ 切换：上帝视角');
+                    }
+                    break;
+                    
+                case 'switchToDataView':
+                    if (typeof window.switchToDataView === 'function') {
+                        window.switchToDataView();
+                        console.log('✅ 切换：数据视角');
+                    }
+                    break;
+                    
+                case 'toggleView':
+                    if (typeof window.toggleView === 'function') {
+                        window.toggleView();
+                        console.log('✅ 切换：视角');
+                    }
+                    break;
+                
+                // 速度控制
+                case 'speedUp':
+                    if (typeof animationSpeed !== 'undefined') {
+                        animationSpeed = Math.max(500, animationSpeed - 500);
+                        console.log('✅ 加速，当前速度:', animationSpeed, 'ms');
+                    }
+                    break;
+                    
+                case 'slowDown':
+                    if (typeof animationSpeed !== 'undefined') {
+                        animationSpeed = Math.min(5000, animationSpeed + 500);
+                        console.log('✅ 减速，当前速度:', animationSpeed, 'ms');
+                    }
+                    break;
+                    
+                default:
+                    console.warn('❓ 未知的消息类型:', message.type);
+            }
+        });
+        
+        // ========== 启动 ==========
+        initScene();
+        defineSteps();
+        animate();
+        
+        console.log('✅ 场景初始化完成，准备接收消息');
+    </script>
+</body>
+</html>
+\`\`\`
+
+### 重要提示
+
+1. **这是一个完整可运行的参考实现**，包含了所有最佳实践
+2. **所有函数都使用 window.xxx 方式定义**，确保 HTML onclick 可以访问
+3. **包含完整的边界检查**，防止 undefined 错误
+4. **动画状态通过闭包捕获**，避免异步问题
+5. **清理机制完善**，防止内存泄漏
+
+在生成其他算法时，请参考这个模板的结构和实现细节！
+
 ## Phase 3: 输出格式
 
 你的回复必须严格遵循以下结构：
@@ -1526,6 +2695,27 @@ function moveDisk(disk, targetPosition) {
 ### 设计理念
 [2-3句话解释如何通过可视化帮助理解该概念]
 
+### 教育价值
+请提供以下教育性信息（这些将显示在用户界面上）：
+
+**核心概念：** [用简单的语言解释该算法/概念的核心思想]
+
+**适用场景：** [列举 2-3 个实际应用场景]
+
+**时间复杂度：**
+- 最好情况：O(?)
+- 平均情况：O(?)
+- 最坏情况：O(?)
+
+**空间复杂度：** O(?)
+
+**学习建议：**
+1. [建议1 - 如何理解该算法]
+2. [建议2 - 常见误区]
+3. [建议3 - 实践建议]
+
+**相关概念：** [列举 3-4 个相关的算法或概念]
+
 ### 完整代码
 \`\`\`html
 [完整的可运行 HTML 代码]
@@ -1534,7 +2724,10 @@ function moveDisk(disk, targetPosition) {
 ### 使用说明
 1. 参数说明：[解释每个参数的含义]
 2. 演示步骤：[列出所有步骤]
-3. 交互方式：[说明如何操作]`;
+3. 交互方式：[说明如何操作]
+
+### 教学重点
+[标注在演示中最应该关注的 2-3 个关键步骤]`;
 }
 
 export function buildUserPrompt(concept: string): string {
@@ -1543,17 +2736,107 @@ export function buildUserPrompt(concept: string): string {
 ## 知识点
 ${concept}
 
-## 核心要求
-1. **教学第一**：这是一个教学工具，不是艺术展示。重点是帮助学生理解算法/概念的工作原理
-2. **分步演示**：必须将算法/概念分解成清晰的步骤，每步都有详细说明
-3. **参数可控**：学生应该能够输入自己的数据来测试理解
-4. **专业美观**：使用现代、简洁的设计，参考专业的技术文档可视化风格
+## ⚠️ 强制性要求（必须全部满足，否则生成失败）
+
+### 1. 完整性检查清单
+
+**必须生成的组件**（缺一不可）：
+- ✅ 所有 3D 对象（节点、连线、数组元素等）
+- ✅ 所有标签（数值、索引、序号）
+- ✅ 至少 3 个步骤的演示
+- ✅ 完整的控制面板（参数输入 + 演示控制）
+- ✅ postMessage 监听器（用于自然语言控制）
+
+**特定算法的必需组件**：
+- 汉诺塔：**必须生成 3 根柱子**（使用 CylinderGeometry）
+- 二叉树：**必须显示节点值和序号**（使用 CSS2DObject）
+- 数组算法：**必须显示索引和值**
+
+### 2. 核心功能要求
+
+1. **教学第一**：重点是帮助理解算法原理，不是艺术展示
+2. **分步演示**：必须将算法分解成至少 3 个清晰的步骤
+3. **参数可控**：必须提供输入框让用户修改数据
+4. **专业美观**：使用现代、简洁的设计
+
+### 3. 代码质量要求
+
+**必须使用 window.xxx 定义的函数**：
+\`\`\`javascript
+window.autoPlay = function() { ... };
+window.pause = function() { ... };
+window.nextStep = function() { ... };
+window.prevStep = function() { ... };
+window.reset = function() { ... };
+window.applyParameters = function() { ... };
+window.switchToGodView = function() { ... };
+window.switchToDataView = function() { ... };
+window.toggleView = function() { ... };
+\`\`\`
+
+**必须包含边界检查**：
+\`\`\`javascript
+// 访问数组前检查
+if (index < 0 || index >= array.length) return;
+if (!array[index]) return;
+
+// 访问对象前检查
+if (!node || !node.mesh || !node.mesh.material) return;
+\`\`\`
+
+**必须包含内存清理**：
+\`\`\`javascript
+// 清理旧对象
+objects.forEach(obj => {
+    if (obj && obj.parent) {
+        scene.remove(obj);
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+    }
+});
+objects.length = 0;
+\`\`\`
+
+### 4. 用户体验要求
+
+- ✅ 不要使用黑色背景（使用渐变色或浅色）
+- ✅ 提供完整的自动演示功能（播放/暂停/步进）
+- ✅ 每个步骤都要有清晰的文字说明
+- ✅ 右侧控制面板必须包含参数输入和演示控制
+- ✅ 必须包含 postMessage 监听器（支持自然语言控制）
+
+### 5. 测试检查
+
+生成代码前，请确认：
+- [ ] 所有必需的 3D 对象都已创建
+- [ ] 所有函数都使用 window.xxx 方式定义
+- [ ] 所有数组访问都有边界检查
+- [ ] 所有对象访问都有 null 检查
+- [ ] 包含完整的清理机制
+- [ ] 包含 postMessage 监听器
+- [ ] 至少有 3 个演示步骤
+- [ ] 参数可以修改
 
 ## 特别强调
-- 不要使用黑色背景，使用渐变色或浅色背景
-- 提供完整的自动演示功能（播放/暂停/步进）
-- 每个步骤都要有清晰的文字说明
-- 右侧控制面板必须包含参数输入和演示控制
 
-请开始设计和编码。`;
+**汉诺塔算法**：
+- ⚠️ **必须创建 3 根柱子**！不要遗漏！
+- 使用 \`createPegs()\` 函数创建柱子
+- 使用 \`createDisks(n)\` 函数创建盘子
+- 实现三段动画：上升-横移-下降
+
+**二叉树算法**：
+- ⚠️ **节点值必须精确匹配用户输入**！
+- 必须显示访问序号（1, 2, 3...）
+- 必须实现连线（使用 Line 连接父子节点）
+- 使用 \`createBinaryTree(values)\` 创建完整的树
+
+**数组算法**：
+- 必须显示数组索引 [0], [1], [2]...
+- 必须显示数组值
+- 必须显示指针（L, R, M 等）
+
+## 现在开始生成
+
+请严格遵守以上所有要求，生成完整、稳定、高质量的代码！`;
 }
