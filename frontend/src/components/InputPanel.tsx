@@ -1,4 +1,4 @@
-// 知識點輸入面板
+// 知识点输入面板
 import { useState } from 'react';
 import { useAppStore } from '../stores/appStore';
 import { useGeneration } from '../hooks/useGeneration';

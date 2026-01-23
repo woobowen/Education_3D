@@ -1,13 +1,20 @@
-﻿class CSS2DObject {
+class CSS2DObject extends THREE.Object3D {
     constructor(element) {
+        super();
+        
         this.element = element;
         this.element.style.position = "absolute";
         this.element.style.pointerEvents = "auto";
         this.element.style.userSelect = "none";
-        this.position = new THREE.Vector3();
-        this.rotation = new THREE.Euler();
-        this.scale = new THREE.Vector3(1, 1, 1);
-        this.parent = null;
+        
+        // 标记为 CSS2DObject 类型（用于渲染器识别）
+        this.isCSS2DObject = true;
+    }
+    
+    copy(source, recursive) {
+        super.copy(source, recursive);
+        this.element = source.element.cloneNode(true);
+        return this;
     }
 }
 
@@ -37,36 +44,49 @@ class CSS2DRenderer {
         const projectionMatrix = camera.projectionMatrix;
 
         const renderObject = (object) => {
-            if (object instanceof CSS2DObject) {
-                vector.setFromMatrixPosition(object.matrixWorld || new THREE.Matrix4());
+            // 检查是否为 CSS2DObject
+            if (object.isCSS2DObject) {
+                // 确保对象有 matrixWorld
+                object.updateMatrixWorld();
+                
+                vector.setFromMatrixPosition(object.matrixWorld);
                 vector.applyMatrix4(viewMatrix);
                 vector.applyMatrix4(projectionMatrix);
 
                 const element = object.element;
                 
+                // 检查是否在视锥体内
                 if (vector.z > -1 && vector.z < 1) {
                     element.style.display = "";
-                    element.style.transform = 
-                        "translate(-50%, -50%) translate(" + 
-                        (vector.x * this._widthHalf + this._widthHalf) + "px," + 
-                        (-(vector.y * this._heightHalf) + this._heightHalf) + "px)";
+                    
+                    // 计算屏幕坐标
+                    const x = (vector.x * this._widthHalf) + this._widthHalf;
+                    const y = -(vector.y * this._heightHalf) + this._heightHalf;
+                    
+                    element.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                    
+                    // 设置 z-index 以实现正确的深度排序
+                    element.style.zIndex = Math.floor((1 - vector.z) / 2 * 100000);
                 } else {
                     element.style.display = "none";
                 }
 
+                // 将元素添加到 DOM（如果还没有）
                 if (!this._cache.objects.has(object)) {
                     this.domElement.appendChild(element);
                     this._cache.objects.set(object, {});
                 }
             }
 
-            if (object.children) {
+            // 递归渲染子对象
+            if (object.children && object.children.length > 0) {
                 for (let i = 0; i < object.children.length; i++) {
                     renderObject(object.children[i]);
                 }
             }
         };
 
+        // 开始渲染场景
         renderObject(scene);
     }
 }

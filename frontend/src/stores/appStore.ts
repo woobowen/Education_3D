@@ -1,4 +1,4 @@
-// Zustand 狀態管理
+// Zustand 状态管理
 import { create } from 'zustand';
 
 export interface AestheticAnalysis {
@@ -27,15 +27,15 @@ export interface AestheticAnalysis {
 }
 
 export interface AppState {
-  // 當前輸入的知識點
+  // 当前输入的知识点
   currentConcept: string;
   setCurrentConcept: (concept: string) => void;
 
-  // 生成狀態
+  // 生成状态
   isGenerating: boolean;
   setIsGenerating: (value: boolean) => void;
 
-  // 進度消息
+  // 进度消息
   progressMessage: string;
   setProgressMessage: (message: string) => void;
 
@@ -43,23 +43,23 @@ export interface AppState {
   generatedHtml: string | null;
   setGeneratedHtml: (html: string | null) => void;
 
-  // 美學分析
+  // 美学分析
   aestheticAnalysis: AestheticAnalysis | null;
   setAestheticAnalysis: (analysis: AestheticAnalysis | null) => void;
 
-  // 教育設計理念
+  // 教育设计理念
   educationalRationale: string | null;
   setEducationalRationale: (rationale: string | null) => void;
 
-  // 互動指南
+  // 交互指南
   interactionGuide: string[];
   setInteractionGuide: (guide: string[]) => void;
 
-  // 錯誤
+  // 错误
   error: string | null;
   setError: (error: string | null) => void;
 
-  // 重置狀態
+  // 重置状态
   reset: () => void;
 }
 

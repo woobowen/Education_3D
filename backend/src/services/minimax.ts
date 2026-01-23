@@ -1,8 +1,8 @@
-// MiniMax API 調用服務
+// MiniMax API 调用服务
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 
-// 加載環境變量
+// 加载环境变量
 dotenv.config();
 
 interface MiniMaxConfig {
@@ -16,19 +16,19 @@ interface MiniMaxConfig {
 const config: MiniMaxConfig = {
   baseUrl: process.env.MINIMAX_BASE_URL || 'https://vip.dmxapi.com/v1',
   apiKey: process.env.MINIMAX_API_KEY || '',
-  model: process.env.MINIMAX_MODEL || 'gpt-4o',  // MiniMax M2.1 通過 OpenAI 兼容接口調用
+  model: process.env.MINIMAX_MODEL || 'gpt-4o',  // MiniMax M2.1 通过 OpenAI 兼容接口调用
   temperature: 0.7,
   maxTokens: 8192
 };
 
-// 驗證 API Key 是否已設置
+// 验证 API Key 是否已设置
 if (!config.apiKey) {
-  console.error('❌ 錯誤：未設置 MINIMAX_API_KEY 環境變量');
-  console.error('請創建 .env 文件並設置 MINIMAX_API_KEY=your-api-key');
+  console.error('❌ 错误：未设置 MINIMAX_API_KEY 环境变量');
+  console.error('请创建 .env 文件并设置 MINIMAX_API_KEY=your-api-key');
   process.exit(1);
 }
 
-// 創建 OpenAI 客戶端（使用 MiniMax 的兼容接口）
+// 创建 OpenAI 客户端（使用 MiniMax 的兼容接口）
 const client = new OpenAI({
   baseURL: config.baseUrl,
   apiKey: config.apiKey,
@@ -41,7 +41,7 @@ export interface StreamCallbacks {
 }
 
 /**
- * 調用 MiniMax API 進行流式生成
+ * 调用 MiniMax API 进行流式生成
  */
 export async function generateVisualization(
   systemPrompt: string,
@@ -78,7 +78,7 @@ export async function generateVisualization(
 }
 
 /**
- * 非流式調用（用於測試）
+ * 非流式调用（用于测试）
  */
 export async function generateVisualizationSync(
   systemPrompt: string,

@@ -1,4 +1,4 @@
-// 互動指南面板
+// 交互指南面板
 import { useState } from 'react';
 import { useAppStore } from '../stores/appStore';
 
@@ -13,7 +13,7 @@ export function InteractionGuide() {
   return (
     <div className="absolute bottom-6 right-6 max-w-md z-10">
       <div className={`bg-white rounded-lg shadow-2xl border-2 border-gray-200 transition-all ${isExpanded ? 'max-h-[600px]' : 'max-h-16'} overflow-hidden`}>
-        {/* 標題欄 */}
+        {/* 标题栏 */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
@@ -22,7 +22,7 @@ export function InteractionGuide() {
             <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <h3 className="font-semibold text-gray-800">互動指南</h3>
+            <h3 className="font-semibold text-gray-800">交互指南</h3>
           </div>
           <svg 
             className={`w-5 h-5 text-gray-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
@@ -34,11 +34,11 @@ export function InteractionGuide() {
           </svg>
         </button>
 
-        {/* 內容區 */}
+        {/* 内容区 */}
         <div className="px-5 pb-5 overflow-y-auto max-h-[520px]">
-          {/* 互動方式 */}
+          {/* 交互方式 */}
           <div className="mb-4">
-            <h4 className="font-semibold text-gray-700 mb-2">可用的互動方式：</h4>
+            <h4 className="font-semibold text-gray-700 mb-2">可用的交互方式：</h4>
             <ul className="space-y-2">
               {interactionGuide.map((guide, index) => (
                 <li key={index} className="flex items-start gap-2 text-sm text-gray-600">
@@ -49,25 +49,25 @@ export function InteractionGuide() {
             </ul>
           </div>
 
-          {/* 教育設計理念 */}
+          {/* 教育设计理念 */}
           {educationalRationale && (
             <div className="mb-4 pt-4 border-t border-gray-200">
-              <h4 className="font-semibold text-gray-700 mb-2">設計理念：</h4>
+              <h4 className="font-semibold text-gray-700 mb-2">设计理念：</h4>
               <p className="text-sm text-gray-600 leading-relaxed">{educationalRationale}</p>
             </div>
           )}
 
-          {/* 美學分析 */}
+          {/* 美学分析 */}
           {aestheticAnalysis && (
             <div className="pt-4 border-t border-gray-200">
-              <h4 className="font-semibold text-gray-700 mb-2">美學設計：</h4>
+              <h4 className="font-semibold text-gray-700 mb-2">美学设计：</h4>
               <div className="space-y-2 text-sm">
                 <div>
-                  <span className="font-medium text-gray-700">藝術風格：</span>
+                  <span className="font-medium text-gray-700">艺术风格：</span>
                   <span className="text-gray-600 ml-2">{aestheticAnalysis.aesthetic_decision.art_movement}</span>
                 </div>
                 <div>
-                  <span className="font-medium text-gray-700">材質風格：</span>
+                  <span className="font-medium text-gray-700">材质风格：</span>
                   <span className="text-gray-600 ml-2">{aestheticAnalysis.aesthetic_decision.material_style}</span>
                 </div>
                 <div>

@@ -1,4 +1,4 @@
-// 共享類型定義
+// 共享类型定义
 
 export interface GenerationRequest {
   concept: string;

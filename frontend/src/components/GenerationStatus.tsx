@@ -1,4 +1,4 @@
-// 生成狀態顯示
+// 生成状态显示
 import { useAppStore } from '../stores/appStore';
 
 export function GenerationStatus() {

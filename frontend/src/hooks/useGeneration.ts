@@ -1,4 +1,4 @@
-// SSE 連接管理 Hook
+// SSE 连接管理 Hook
 import { useCallback } from 'react';
 import { useAppStore } from '../stores/appStore';
 
@@ -15,7 +15,7 @@ export function useGeneration() {
   } = useAppStore();
 
   const generate = useCallback(async (concept: string) => {
-    // 重置狀態
+    // 重置状态
     reset();
     setIsGenerating(true);
     setError(null);
@@ -37,7 +37,7 @@ export function useGeneration() {
       const decoder = new TextDecoder();
 
       if (!reader) {
-        throw new Error('無法獲取響應流');
+        throw new Error('无法获取响应流');
       }
 
       while (true) {
@@ -73,14 +73,14 @@ export function useGeneration() {
                   break;
               }
             } catch (e) {
-              console.error('解析 SSE 數據錯誤:', e);
+              console.error('解析 SSE 数据错误:', e);
             }
           }
         }
       }
     } catch (error) {
-      console.error('生成錯誤:', error);
-      setError(error instanceof Error ? error.message : '未知錯誤');
+      console.error('生成错误:', error);
+      setError(error instanceof Error ? error.message : '未知错误');
       setIsGenerating(false);
     }
   }, [reset, setIsGenerating, setProgressMessage, setGeneratedHtml, 
