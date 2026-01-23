@@ -46,16 +46,16 @@ export function Sandbox3D({ htmlContent, isLoading }: Sandbox3DProps) {
       {/* 交互指南 */}
       <InteractionGuide />
       
-      {/* 自然語言控制台切換按鈕 */}
+      {/* 自然语言控制台切换按钮 */}
       <button
         onClick={() => setShowNLConsole(!showNLConsole)}
         className="absolute top-4 right-4 z-50 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all flex items-center gap-2 font-medium"
       >
         <span className="text-xl">🤖</span>
-        {showNLConsole ? '隱藏' : '顯示'}自然語言控制台
+        {showNLConsole ? '隐藏' : '显示'}自然语言控制台
       </button>
       
-      {/* 自然語言控制台 */}
+      {/* 自然语言控制台 */}
       {showNLConsole && <NaturalLanguageConsole />}
 
       {/* 全屏 iframe - 安全说明：
