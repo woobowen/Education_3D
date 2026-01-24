@@ -141,10 +141,22 @@ function createTreeNode(value, x, y, z, index) {
 
 // ========== 创建完整二叉树 ==========
 function createBinaryTree(values) {
-    // 清空旧数据
+    // 清空旧数据（包括CSS2D标签）
     treeNodes.forEach(node => {
-        if (node && node.mesh && node.mesh.parent) {
-            scene.remove(node.mesh);
+        if (node && node.mesh) {
+            // 先清理CSS2D标签子对象
+            if (node.mesh.children) {
+                const childrenToRemove = [...node.mesh.children];
+                childrenToRemove.forEach(child => {
+                    node.mesh.remove(child);
+                    if (child.element && child.element.parentNode) {
+                        child.element.parentNode.removeChild(child.element);
+                    }
+                });
+            }
+            if (node.mesh.parent) {
+                scene.remove(node.mesh);
+            }
             if (node.mesh.geometry) node.mesh.geometry.dispose();
             if (node.mesh.material) node.mesh.material.dispose();
         }
@@ -366,9 +378,19 @@ function resetAllNodes() {
 
 // **生命周期管理：清理函数（防止内存泄漏和重影）**
 function disposeTree() {
-    // 1. 清理所有节点
+    // 1. 清理所有节点（包括CSS2D标签）
     treeNodes.forEach(node => {
         if (node && node.mesh) {
+            // 先清理CSS2D标签子对象
+            if (node.mesh.children) {
+                const childrenToRemove = [...node.mesh.children];
+                childrenToRemove.forEach(child => {
+                    node.mesh.remove(child);
+                    if (child.element && child.element.parentNode) {
+                        child.element.parentNode.removeChild(child.element);
+                    }
+                });
+            }
             scene.remove(node.mesh);
             if (node.mesh.geometry) node.mesh.geometry.dispose();
             if (node.mesh.material) node.mesh.material.dispose();
@@ -544,10 +566,19 @@ function isValidMove(disk, targetPeg) {
 }
 
 // ========== 移动盘子（三段动画：上升-横移-下降）==========
-async function moveDiskWithAnimation(diskIndex, fromPegIndex, toPegIndex) {
-    const disk = disks[diskIndex];
+// ⚠️ 重要：此函数只能移动柱子顶部的盘子！
+async function moveDiskWithAnimation(fromPegIndex, toPegIndex) {
+    // 获取源柱子顶部的盘子
+    const fromStack = pegStacks[fromPegIndex];
+    if (fromStack.length === 0) {
+        console.error('源柱子为空，无法移动');
+        return false;
+    }
+    
+    // 只能移动顶部的盘子
+    const disk = fromStack[fromStack.length - 1];
     if (!disk) {
-        console.error('盘子不存在:', diskIndex);
+        console.error('盘子不存在');
         return false;
     }
     
@@ -558,14 +589,10 @@ async function moveDiskWithAnimation(diskIndex, fromPegIndex, toPegIndex) {
     }
     
     // 更新柱子栈状态
-    const fromStack = pegStacks[fromPegIndex];
     const toStack = pegStacks[toPegIndex];
     
-    // 从源柱子移除
-    const removeIndex = fromStack.indexOf(disk);
-    if (removeIndex !== -1) {
-        fromStack.splice(removeIndex, 1);
-    }
+    // 从源柱子移除顶部盘子
+    fromStack.pop();
     
     // 1. 上升阶段
     const riseHeight = 7;  // 上升到足够高的位置
@@ -711,6 +738,32 @@ function tweenPosition(object, target, duration) {
             .onComplete(resolve)
             .start();
     });
+}
+
+// ========== 汉诺塔递归算法（核心逻辑）==========
+// ⚠️ 非常重要：必须使用递归算法！不能直接移动底层盘子！
+async function solveHanoi(n, from, to, aux, moves) {
+    if (n === 1) {
+        // 基础情况：只有一个盘子，直接移动
+        moves.push({ from, to, disk: 1 });
+        return;
+    }
+    
+    // 递归步骤 1：将 n-1 个盘子从 from 移动到 aux（借助 to）
+    await solveHanoi(n - 1, from, aux, to, moves);
+    
+    // 步骤 2：将第 n 个盘子从 from 移动到 to
+    moves.push({ from, to, disk: n });
+    
+    // 递归步骤 3：将 n-1 个盘子从 aux 移动到 to（借助 from）
+    await solveHanoi(n - 1, aux, to, from, moves);
+}
+
+// ========== 生成所有移动步骤 ==========
+async function generateHanoiMoves(numDisks) {
+    const moves = [];
+    await solveHanoi(numDisks, 0, 2, 1, moves);  // 从柱0到柱2（借助柱1）
+    return moves;
 }
 \`\`\`
 
@@ -954,6 +1007,18 @@ function tweenPosition(object, target, duration) {
         <div class="section">
             <h3>⚙️ 参数设置</h3>
             <!-- 动态生成参数输入框，例如： -->
+            
+            <!-- 如果是支持多变体的算法，首先添加变体选择器 -->
+            <!-- 示例：二叉树遍历 -->
+            <!-- <div class="param-group">
+                <label class="param-label">遍历方式</label>
+                <select id="variant-type" class="param-input">
+                    <option value="preorder">前序遍历（根-左-右）</option>
+                    <option value="inorder">中序遍历（左-根-右）</option>
+                    <option value="postorder">后序遍历（左-右-根）</option>
+                </select>
+            </div> -->
+            
             <div class="param-group">
                 <label class="param-label">输入数组（逗号分隔）</label>
                 <input type="text" class="param-input" id="input-array" value="5,2,8,1,9,3" placeholder="例如: 5,2,8,1,9,3">
@@ -2622,6 +2687,126 @@ function moveDisk(disk, targetPosition) {
                     }
                     break;
                 
+                // 通用参数设置
+                case 'setParameter':
+                    if (message.name && message.value !== undefined) {
+                        const element = document.getElementById(message.name);
+                        if (element) {
+                            if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                                element.value = message.value.toString();
+                            } else if (element.tagName === 'SELECT') {
+                                element.value = message.value.toString();
+                            }
+                            if (typeof window.applyParameters === 'function') {
+                                window.applyParameters();
+                            }
+                            console.log('✅ 设置参数', message.name, ':', message.value);
+                        }
+                    }
+                    break;
+                
+                // 切换算法变体（如二叉树遍历方式）
+                case 'switchVariant':
+                    if (message.variant) {
+                        // 尝试多种可能的元素id
+                        const variantElement = document.getElementById('variant-type') 
+                            || document.querySelector('select[id*="variant"]')
+                            || document.querySelector('select[id*="traversal"]');
+                        if (variantElement) {
+                            variantElement.value = message.variant;
+                            // 触发change事件确保UI更新
+                            variantElement.dispatchEvent(new Event('change', { bubbles: true }));
+                            if (typeof window.applyParameters === 'function') {
+                                window.applyParameters();
+                            }
+                            console.log('✅ 切换变体:', message.variant);
+                        } else {
+                            // 如果找不到元素，直接设置全局变量
+                            if (typeof currentTraversalType !== 'undefined') {
+                                currentTraversalType = message.variant;
+                                if (typeof window.applyParameters === 'function') {
+                                    window.applyParameters();
+                                }
+                                console.log('✅ 直接设置遍历类型:', message.variant);
+                            } else {
+                                console.warn('⚠️ 找不到变体选择器元素');
+                            }
+                        }
+                    }
+                    break;
+                
+                // 对比多种变体（依次展示）
+                case 'compareVariants':
+                    if (message.variants && Array.isArray(message.variants) && message.variants.length >= 2) {
+                        const variants = message.variants;
+                        let currentIndex = 0;
+                        
+                        // 显示对比提示
+                        const compareInfoDiv = document.createElement('div');
+                        compareInfoDiv.id = 'compare-info';
+                        compareInfoDiv.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(102,126,234,0.95);color:white;padding:15px 30px;border-radius:12px;font-size:16px;font-weight:bold;z-index:10000;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+                        compareInfoDiv.textContent = '🔄 对比模式：' + variants.map(v => ({preorder:'前序',inorder:'中序',postorder:'后序'}[v] || v)).join(' vs ');
+                        document.body.appendChild(compareInfoDiv);
+                        
+                        // 依次展示每种变体
+                        async function showNextVariant() {
+                            if (currentIndex >= variants.length) {
+                                // 对比完成，重新开始循环
+                                currentIndex = 0;
+                            }
+                            
+                            const variant = variants[currentIndex];
+                            const variantNames = {preorder:'前序遍历',inorder:'中序遍历',postorder:'后序遍历'};
+                            
+                            // 更新提示
+                            const infoDiv = document.getElementById('compare-info');
+                            if (infoDiv) {
+                                infoDiv.textContent = '🔄 当前：' + (variantNames[variant] || variant) + ' (' + (currentIndex+1) + '/' + variants.length + ')';
+                            }
+                            
+                            // 切换变体
+                            const variantElement = document.getElementById('variant-type') 
+                                || document.querySelector('select[id*="variant"]')
+                                || document.querySelector('select[id*="traversal"]');
+                            if (variantElement) {
+                                variantElement.value = variant;
+                                variantElement.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                            if (typeof currentTraversalType !== 'undefined') {
+                                currentTraversalType = variant;
+                            }
+                            if (typeof window.applyParameters === 'function') {
+                                window.applyParameters();
+                            }
+                            
+                            // 自动播放演示
+                            setTimeout(() => {
+                                if (typeof window.autoPlay === 'function') {
+                                    window.autoPlay();
+                                }
+                            }, 500);
+                            
+                            currentIndex++;
+                            
+                            // 5秒后切换到下一个变体（如果用户没有操作）
+                            setTimeout(() => {
+                                if (currentIndex < variants.length) {
+                                    showNextVariant();
+                                } else {
+                                    // 对比结束，移除提示
+                                    setTimeout(() => {
+                                        const infoDiv = document.getElementById('compare-info');
+                                        if (infoDiv) infoDiv.remove();
+                                    }, 3000);
+                                }
+                            }, 8000);
+                        }
+                        
+                        showNextVariant();
+                        console.log('✅ 开始对比变体:', variants);
+                    }
+                    break;
+                
                 // 视角控制
                 case 'switchToGodView':
                     if (typeof window.switchToGodView === 'function') {
@@ -2761,6 +2946,29 @@ ${concept}
 
 ### 3. 代码质量要求
 
+**⚠️ 代码结构顺序（必须严格遵守！）**：
+\`\`\`javascript
+// 1. 首先定义所有辅助函数
+function createLabel(text, color = '#1e293b') { ... }
+function tweenPosition(object, target, duration) { ... }
+
+// 2. 然后定义全局变量
+let pegs = [];
+let disks = [];
+let steps = [];
+
+// 3. 然后定义创建函数（这些函数会调用辅助函数）
+function createPegs() { ... }  // 可以调用 createLabel
+function createDisks(n) { ... }  // 可以调用 createLabel
+
+// 4. 然后定义 window 函数
+window.applyParameters = function() { ... };
+window.autoPlay = function() { ... };
+
+// 5. 最后调用初始化
+initScene();
+\`\`\`
+
 **必须使用 window.xxx 定义的函数**：
 \`\`\`javascript
 window.autoPlay = function() { ... };
@@ -2817,19 +3025,354 @@ objects.length = 0;
 - [ ] 至少有 3 个演示步骤
 - [ ] 参数可以修改
 
+## 多变体支持（重要！）
+
+对于有多种变体的算法/数据结构，必须支持所有主要变体：
+
+**二叉树遍历**：
+- 必须支持：前序遍历、中序遍历、后序遍历
+- 在参数面板添加选择器让用户切换
+- 每种遍历方式都应该有独立的步骤数组
+
+**排序算法**：
+- 快速排序：支持不同的基准选择策略（首元素、末元素、中间元素、随机）
+- 归并排序：展示递归分解过程
+
+**搜索算法**：
+- 图搜索：支持 DFS（深度优先）和 BFS（广度优先）
+- 在参数面板添加算法选择器
+
+**实现模式**：
+\`\`\`javascript
+// 示例：二叉树遍历的多变体支持
+let currentTraversalType = 'preorder';  // 当前选择的遍历方式
+
+window.applyParameters = function() {
+    // 读取遍历类型
+    const traversalSelect = document.getElementById('variant-type');
+    if (traversalSelect) {
+        currentTraversalType = traversalSelect.value;
+    }
+    
+    // 根据类型重新生成步骤
+    switch(currentTraversalType) {
+        case 'preorder':
+            steps = generatePreorderSteps();
+            break;
+        case 'inorder':
+            steps = generateInorderSteps();
+            break;
+        case 'postorder':
+            steps = generatePostorderSteps();
+            break;
+    }
+    
+    reset();
+};
+
+function generatePreorderSteps() {
+    const steps = [];
+    // 实现前序遍历逻辑：根-左-右
+    return steps;
+}
+
+function generateInorderSteps() {
+    const steps = [];
+    // 实现中序遍历逻辑：左-根-右
+    return steps;
+}
+
+function generatePostorderSteps() {
+    const steps = [];
+    // 实现后序遍历逻辑：左-右-根
+    return steps;
+}
+\`\`\`
+
 ## 特别强调
 
-**汉诺塔算法**：
+**汉诺塔算法（极其重要！）**：
 - ⚠️ **必须创建 3 根柱子**！不要遗漏！
 - 使用 \`createPegs()\` 函数创建柱子
 - 使用 \`createDisks(n)\` 函数创建盘子
-- 实现三段动画：上升-横移-下降
+
+### ⚠️⚠️⚠️ 汉诺塔核心规则（必须严格遵守！） ⚠️⚠️⚠️
+
+**规则1**：每次只能移动一个盘子
+**规则2**：只能移动柱子最顶部的盘子（不能移动被压住的盘子！）
+**规则3**：大盘子永远不能放在小盘子上面
+
+**正确的移动步骤生成（3个盘子为例）**：
+1. 移动盘子1（最小）：A → C
+2. 移动盘子2（中等）：A → B  
+3. 移动盘子1（最小）：C → B
+4. 移动盘子3（最大）：A → C  ← 这时A柱才只剩最大盘子！
+5. 移动盘子1（最小）：B → A
+6. 移动盘子2（中等）：B → C
+7. 移动盘子1（最小）：A → C
+
+**递归算法实现（必须使用！）**：
+\`\`\`javascript
+// 生成移动步骤的递归函数
+function generateMoves(n, from, to, aux, moves) {
+    if (n === 1) {
+        moves.push({ from, to });
+        return;
+    }
+    // 第一步：把上面 n-1 个盘子移到辅助柱
+    generateMoves(n - 1, from, aux, to, moves);
+    // 第二步：把最大盘子移到目标柱
+    moves.push({ from, to });
+    // 第三步：把 n-1 个盘子从辅助柱移到目标柱
+    generateMoves(n - 1, aux, to, from, moves);
+}
+
+// 在 initScene 中调用
+function initScene() {
+    createPegs();
+    createDisks(numDisks);
+    
+    // 生成所有移动步骤
+    const allMoves = [];
+    generateMoves(numDisks, 0, 2, 1, allMoves);
+    
+    // 基于移动步骤创建演示步骤
+    steps = allMoves.map((move, index) => ({
+        title: \`步骤 \${index + 1}: 移动盘子\`,
+        description: \`将柱子 \${['A','B','C'][move.from]} 顶部的盘子移到柱子 \${['A','B','C'][move.to]}\`,
+        animate: () => moveDiskWithAnimation(move.from, move.to)
+    }));
+}
+\`\`\`
+
+**❌ 错误示例（严禁这样做！）**：
+- 直接移动最底层的盘子
+- 第一步就移动大盘子
+- 把大盘子放在小盘子上
+
+**✅ 正确示例**：
+- 每步只移动柱子顶部的盘子
+- 遵循递归分解策略
+- 总步数 = 2^n - 1（n是盘子数）
+
+### 汉诺塔完整代码骨架（必须完全遵循！）
+
+**⚠️⚠️⚠️ 代码结构顺序极其重要！必须按以下顺序编写！⚠️⚠️⚠️**
+
+\`\`\`javascript
+// ========== 1. 首先创建 Three.js 场景 ==========
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf0f4f8);
+
+const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+camera.position.set(0, 8, 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(container.clientWidth, container.clientHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.appendChild(labelRenderer.domElement);
+
+// 添加灯光
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(5, 10, 5);
+scene.add(dirLight);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ========== 2. 然后定义辅助函数（在 scene 创建之后！） ==========
+function createLabel(text, color = '#1e293b') {
+    const div = document.createElement('div');
+    div.textContent = text;
+    div.style.color = color;
+    div.style.fontSize = '16px';
+    div.style.fontWeight = 'bold';
+    div.style.padding = '4px 8px';
+    div.style.background = 'rgba(255,255,255,0.9)';
+    div.style.borderRadius = '4px';
+    return new CSS2DObject(div);
+}
+
+// ========== 3. 定义全局变量 ==========
+const pegs = [];
+const disks = [];
+const pegPositions = [-4, 0, 4];
+const pegStacks = [[], [], []];
+let steps = [];
+let currentStep = 0;
+let isPlaying = false;
+let numDisks = 3;
+
+// ========== 4. 创建柱子函数 ==========
+function createPegs() {
+    pegs.forEach(p => { if(p && p.parent) scene.remove(p); });
+    pegs.length = 0;
+    pegPositions.forEach((x, i) => {
+        const geo = new THREE.CylinderGeometry(0.2, 0.2, 6, 16);
+        const mat = new THREE.MeshStandardMaterial({color: 0x8b4513});
+        const peg = new THREE.Mesh(geo, mat);
+        peg.position.set(x, 3, 0);
+        scene.add(peg);
+        pegs.push(peg);
+        const label = createLabel(['A','B','C'][i]);
+        label.position.set(0, -3.5, 0);
+        peg.add(label);
+    });
+}
+
+// ========== 5. 创建盘子函数 ==========
+function createDisks(n) {
+    disks.forEach(d => { if(d && d.parent) scene.remove(d); });
+    disks.length = 0;
+    pegStacks.forEach(s => s.length = 0);
+    const colors = [0xff6b6b, 0xf06595, 0xcc5de8, 0x845ef7, 0x5c7cfa];
+    for (let i = 0; i < n; i++) {
+        const size = n - i;
+        const radius = 0.4 + size * 0.3;
+        const geo = new THREE.CylinderGeometry(radius, radius, 0.3, 32);
+        const mat = new THREE.MeshStandardMaterial({color: colors[i % 5], metalness: 0.6});
+        const disk = new THREE.Mesh(geo, mat);
+        disk.userData.size = size;
+        disk.position.set(pegPositions[0], 0.15 + i * 0.3, 0);
+        scene.add(disk);
+        disks.push(disk);
+        pegStacks[0].push(disk);
+        const label = createLabel(size.toString(), '#fff');
+        label.position.set(0, 0, 0);
+        disk.add(label);
+    }
+}
+
+// ========== 6. 递归生成移动步骤 ==========
+function generateMoves(n, from, to, aux, moves) {
+    if (n === 1) { moves.push({from, to}); return; }
+    generateMoves(n - 1, from, aux, to, moves);
+    moves.push({from, to});
+    generateMoves(n - 1, aux, to, from, moves);
+}
+
+// ========== 7. 移动动画 ==========
+async function moveDiskWithAnimation(fromPeg, toPeg) {
+    const fromStack = pegStacks[fromPeg];
+    if (!fromStack || fromStack.length === 0) return;
+    const disk = fromStack.pop();
+    const toStack = pegStacks[toPeg];
+    const targetY = 0.15 + toStack.length * 0.3;
+    const targetX = pegPositions[toPeg];
+    // 上升
+    await tweenTo(disk, {y: 7}, 400);
+    // 横移
+    await tweenTo(disk, {x: targetX}, 600);
+    // 下降
+    await tweenTo(disk, {y: targetY}, 400);
+    toStack.push(disk);
+}
+
+function tweenTo(obj, target, duration) {
+    return new Promise(resolve => {
+        const start = {x: obj.position.x, y: obj.position.y, z: obj.position.z};
+        const end = {...start, ...target};
+        new TWEEN.Tween(start).to(end, duration)
+            .easing(TWEEN.Easing.Quadratic.InOut)
+            .onUpdate(() => obj.position.set(start.x, start.y, start.z))
+            .onComplete(resolve).start();
+    });
+}
+
+// ========== 8. 初始化场景 ==========
+function initScene() {
+    createPegs();
+    createDisks(numDisks);
+    const moves = [];
+    generateMoves(numDisks, 0, 2, 1, moves);
+    steps = moves.map((m, i) => ({
+        title: \`步骤 \${i+1}: 移动盘子\`,
+        description: \`将柱子 \${['A','B','C'][m.from]} 顶部的盘子移到柱子 \${['A','B','C'][m.to]}\`,
+        animate: () => moveDiskWithAnimation(m.from, m.to)
+    }));
+    updateProgress();
+}
+
+// ========== 9. 控制函数 ==========
+window.applyParameters = function() {
+    numDisks = parseInt(document.getElementById('num-disks').value) || 3;
+    initScene();
+    currentStep = 0;
+    updateProgress();
+};
+window.autoPlay = async function() {
+    isPlaying = true;
+    while (isPlaying && currentStep < steps.length) {
+        await executeStep(currentStep);
+        currentStep++;
+        updateProgress();
+        await new Promise(r => setTimeout(r, 500));
+    }
+    isPlaying = false;
+};
+window.pause = function() { isPlaying = false; };
+window.nextStep = async function() {
+    isPlaying = false;
+    if (currentStep < steps.length) {
+        await executeStep(currentStep);
+        currentStep++;
+        updateProgress();
+    }
+};
+window.prevStep = function() { /* 实现回退逻辑 */ };
+window.reset = function() { currentStep = 0; initScene(); };
+
+async function executeStep(idx) {
+    if (idx < 0 || idx >= steps.length) return;
+    document.getElementById('step-title').textContent = steps[idx].title;
+    document.getElementById('step-description').textContent = steps[idx].description;
+    await steps[idx].animate();
+}
+
+function updateProgress() {
+    document.getElementById('step-counter').textContent = \`\${currentStep}/\${steps.length}\`;
+    const pct = steps.length > 0 ? (currentStep / steps.length) * 100 : 0;
+    document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+// ========== 10. 动画循环 ==========
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    TWEEN.update();
+    renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
+}
+
+// ========== 11. 启动 ==========
+initScene();
+animate();
+\`\`\`
 
 **二叉树算法**：
 - ⚠️ **节点值必须精确匹配用户输入**！
 - 必须显示访问序号（1, 2, 3...）
 - 必须实现连线（使用 Line 连接父子节点）
 - 使用 \`createBinaryTree(values)\` 创建完整的树
+- ⚠️ **支持多种遍历方式**：必须实现前序、中序、后序三种遍历
+- 在参数面板中添加遍历方式选择：
+  \`\`\`html
+  <select id="variant-type" class="param-input">
+    <option value="preorder">前序遍历</option>
+    <option value="inorder">中序遍历</option>
+    <option value="postorder">后序遍历</option>
+  </select>
+  \`\`\`
+- 实现三种遍历函数：\`traversePreorder()\`、\`traverseInorder()\`、\`traversePostorder()\`
 
 **数组算法**：
 - 必须显示数组索引 [0], [1], [2]...
