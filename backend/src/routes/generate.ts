@@ -9,6 +9,7 @@ const router = express.Router();
 
 interface GenerateRequest {
   concept: string;
+  userProfile?: any; // Using any to avoid import issues if type definition path is tricky, but preferably use shared type
 }
 
 /**
@@ -17,10 +18,30 @@ interface GenerateRequest {
  */
 router.post('/generate', async (req: Request, res: Response) => {
   const { concept } = req.body as GenerateRequest;
+  let { userProfile } = req.body as GenerateRequest;
 
   if (!concept || concept.trim().length === 0) {
     res.status(400).json({ error: '请提供知识点' });
     return;
+  }
+
+  // 🛡️ 鲁棒性增强: User Profile 校验与回退
+  // 如果 userProfile 存在，确保 programmingLanguage 有效
+  if (userProfile) {
+    const validLanguages = ['C', 'C++', 'Python', 'Java', 'Go'];
+    
+    // 如果 language 字段为空或不在支持列表中，回退到 Python
+    if (!userProfile.programmingLanguage || !validLanguages.includes(userProfile.programmingLanguage)) {
+      console.warn(`Invalid or missing programming language: '${userProfile.programmingLanguage}'. Fallback to 'Python'.`);
+      userProfile = {
+        ...userProfile,
+        programmingLanguage: 'Python'
+      };
+    }
+  } else {
+    // 如果没有 userProfile，创建一个默认的（可选，视业务需求而定）
+    // 这里我们保持 undefined，让 promptEngine 处理默认情况，或者可以注入默认 profile
+    // userProfile = { programmingLanguage: 'Python', ... }; 
   }
 
   // 设置 SSE 响应头
@@ -35,8 +56,8 @@ router.post('/generate', async (req: Request, res: Response) => {
   try {
     sendEvent('progress', { message: '正在构建提示词...' });
 
-    const systemPrompt = buildSystemPrompt();
-    const userPrompt = buildUserPrompt(concept);
+    const systemPrompt = buildSystemPrompt(userProfile);
+    const userPrompt = buildUserPrompt(concept, userProfile);
 
     sendEvent('progress', { message: '正在调用 AI 生成器...' });
 

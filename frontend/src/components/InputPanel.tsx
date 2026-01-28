@@ -1,12 +1,64 @@
 // 知识点输入面板
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '../stores/appStore';
 import { useGeneration } from '../hooks/useGeneration';
 
 export function InputPanel() {
   const [inputValue, setInputValue] = useState('');
+  const [showProfile, setShowProfile] = useState(false);
+  const [userProfile, setUserProfile] = useState({
+    age: 16,
+    gender: 'male',
+    programmingLanguage: 'Python',
+    studyCycle: '3h/day',
+    difficulty: 'beginner',
+    learningGoal: '理解基本原理'
+  });
   const { isGenerating, setCurrentConcept } = useAppStore();
   const { generate } = useGeneration();
+
+  const parseProfile = async (text: string) => {
+    try {
+      // Use full URL for robustness, or rely on proxy. Assuming proxy is set up or same origin.
+      // In Vite dev, we might need to be careful, but usually /api works if proxy is configured.
+      // Based on backend setup, it listens on port 3000. Frontend likely on 5173.
+      // Vite config usually proxies /api to localhost:3000.
+      const response = await fetch('/api/parse-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      
+      if (response.ok) {
+        const profile = await response.json();
+        setUserProfile(prev => ({ ...prev, ...profile }));
+        setShowProfile(true);
+      }
+    } catch (error) {
+      console.error('Failed to parse profile:', error);
+    }
+  };
+
+  useEffect(() => {
+    // 1. Check URL parameters
+    const params = new URLSearchParams(window.location.search);
+    const profileText = params.get('profileText');
+    if (profileText) {
+      parseProfile(profileText);
+      // Optional: Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    // 2. Listen for window messages (for iframe/embed scenarios)
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'UPDATE_PROFILE' && typeof event.data.text === 'string') {
+        parseProfile(event.data.text);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const exampleConcepts = [
     '二分查找',
@@ -23,7 +75,7 @@ export function InputPanel() {
     e.preventDefault();
     if (inputValue.trim() && !isGenerating) {
       setCurrentConcept(inputValue.trim());
-      generate(inputValue.trim());
+      generate(inputValue.trim(), userProfile);
     }
   };
 
@@ -31,8 +83,12 @@ export function InputPanel() {
     if (!isGenerating) {
       setInputValue(concept);
       setCurrentConcept(concept);
-      generate(concept);
+      generate(concept, userProfile);
     }
+  };
+
+  const handleProfileChange = (key: string, value: any) => {
+    setUserProfile(prev => ({ ...prev, [key]: value }));
   };
 
   return (
@@ -47,6 +103,69 @@ export function InputPanel() {
         <p className="text-sm text-gray-500 mt-2">
           ✨ 支持自动演示 • 参数控制 • 步骤说明 • 交互学习
         </p>
+      </div>
+
+      <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <button 
+          type="button"
+          onClick={() => setShowProfile(!showProfile)}
+          className="w-full px-4 py-2 bg-gray-50 hover:bg-gray-100 flex items-center justify-between text-sm text-gray-600 transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            👤 个性化学习设置 (根据您的画像调整教学风格)
+          </span>
+          <span>{showProfile ? '收起 ▲' : '展开 ▼'}</span>
+        </button>
+        
+        {showProfile && (
+          <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-gray-100 animate-fadeIn">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">年龄</label>
+              <input 
+                type="number" 
+                value={userProfile.age}
+                onChange={(e) => handleProfileChange('age', parseInt(e.target.value))}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">编程语言</label>
+              <select 
+                value={userProfile.programmingLanguage}
+                onChange={(e) => handleProfileChange('programmingLanguage', e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="Python">Python</option>
+                <option value="C">C</option>
+                <option value="C++">C++</option>
+                <option value="Java">Java</option>
+                <option value="Go">Go</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">难度</label>
+              <select 
+                value={userProfile.difficulty}
+                onChange={(e) => handleProfileChange('difficulty', e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="beginner">入门 (通俗易懂)</option>
+                <option value="intermediate">进阶 (标准教学)</option>
+                <option value="advanced">专家 (底层原理)</option>
+              </select>
+            </div>
+            <div className="md:col-span-3">
+              <label className="block text-xs font-medium text-gray-500 mb-1">学习目标</label>
+              <input 
+                type="text" 
+                value={userProfile.learningGoal}
+                onChange={(e) => handleProfileChange('learningGoal', e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                placeholder="例如：应付期末考试、面试准备、兴趣学习..."
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="mb-6">

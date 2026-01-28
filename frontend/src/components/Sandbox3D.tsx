@@ -10,6 +10,7 @@ interface Sandbox3DProps {
 }
 
 export function Sandbox3D({ htmlContent, isLoading }: Sandbox3DProps) {
+  console.log('htmlContent', htmlContent);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { reset, currentConcept } = useAppStore();
   const [showNLConsole, setShowNLConsole] = useState(false);

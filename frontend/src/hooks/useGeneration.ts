@@ -14,7 +14,7 @@ export function useGeneration() {
     reset,
   } = useAppStore();
 
-  const generate = useCallback(async (concept: string) => {
+  const generate = useCallback(async (concept: string, userProfile?: any) => {
     // 重置状态
     reset();
     setIsGenerating(true);
@@ -26,7 +26,7 @@ export function useGeneration() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ concept }),
+        body: JSON.stringify({ concept, userProfile }),
       });
 
       if (!response.ok) {

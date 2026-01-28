@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import generateRouter from './routes/generate.js';
 import chatRouter from './routes/chat.js';
+import profileRouter from './routes/profile.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +23,7 @@ app.use('/libs', express.static(path.join(__dirname, '../public/libs')));
 // 路由
 app.use('/api', generateRouter);
 app.use('/api', chatRouter);
+app.use('/api', profileRouter);
 
 // 健康检查
 app.get('/health', (req, res) => {

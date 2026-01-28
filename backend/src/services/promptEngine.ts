@@ -1363,6 +1363,12 @@ async function generateHanoiMoves(numDisks) {
         // ========== 场景初始化 ==========
         function initScene(arrayInput = '5,2,8,1,9,3', targetValue = 8) {
             // 1. 清空之前的对象（释放内存）
+            // 🛡️ 强制清理所有旧标签 DOM 元素
+            const oldLabels = document.querySelectorAll('.label');
+            oldLabels.forEach(el => {
+                if (el.parentNode) el.parentNode.removeChild(el);
+            });
+            
             dataElements.forEach(obj => {
                 if (obj && obj.parent) {
                     scene.remove(obj);
